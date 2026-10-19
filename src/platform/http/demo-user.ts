@@ -10,7 +10,7 @@ export const DEMO_USER_ID = 'demo'
  * par un middleware qui identifie le joueur connecté.
  */
 export const demoUser = () =>
-    createMiddleware<AppEnv>(async (c, next) => {
-        c.set('userId', DEMO_USER_ID)
-        await next()
-    })
+  createMiddleware<AppEnv>(async (c, next) => {
+    c.set('userId', DEMO_USER_ID)
+    await next()
+  })
