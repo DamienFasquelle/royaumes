@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import type { EventStore, StoredEvent } from '../event-store/event-store'
 import type { AppEnv } from '../http/types'
-import { authorize, type ChannelPolicy } from './channel-policy'
+import { authorize, type ChannelPolicy, type ChannelSource } from './channel-policy'
 
 export interface RealtimeOptions {
   /** Journal d'événements : un canal correspond à un flux du journal, ou à tout le journal. */
@@ -37,22 +37,23 @@ function present(event: StoredEvent, policy: ChannelPolicy) {
   }
 }
 
-/** Source des événements d'un canal : comment les lire, et comment les identifier. */
-interface ChannelSource {
-  /** Événements postérieurs à un identifiant, dans l'ordre. */
-  read(after: number): Promise<StoredEvent[]>
+/** Source des événements d'un canal, complétée par la manière de les identifier. */
+interface IdentifiedSource extends ChannelSource {
   /** Identifiant d'un événement, renvoyé par le navigateur dans Last-Event-ID. */
   idOf(event: StoredEvent): number
-  /** Identifiant de départ, lorsque le navigateur n'en fournit aucun. */
-  start(): Promise<number>
 }
 
 /**
  * Un canal ordinaire est un flux du journal, dont les événements sont identifiés par leur
  * version, et transmis depuis le début. Un canal global suit tout le journal : ses événements
- * sont identifiés par leur position, et seuls les événements à venir sont transmis.
+ * sont identifiés par leur position, et seuls les événements à venir sont transmis. Un canal
+ * doté d'une source propre lit cette source, et identifie ses éléments par leur position.
  */
-function sourceOf(store: EventStore, channel: string, policy: ChannelPolicy): ChannelSource {
+function sourceOf(store: EventStore, channel: string, policy: ChannelPolicy): IdentifiedSource {
+  if (policy.source) {
+    const source = policy.source
+    return { read: source.read, start: source.start, idOf: (event) => event.position }
+  }
   const global = policy.global
   if (global) {
     return {
@@ -69,7 +70,7 @@ function sourceOf(store: EventStore, channel: string, policy: ChannelPolicy): Ch
 }
 
 /** Identifiant de reprise fourni par le navigateur (en-tête ou paramètre), ou celui de départ. */
-async function startFrom(given: string | undefined, source: ChannelSource) {
+async function startFrom(given: string | undefined, source: IdentifiedSource) {
   return given === undefined ? source.start() : Number(given) || 0
 }
 
@@ -79,72 +80,72 @@ async function startFrom(given: string | undefined, source: ChannelSource) {
  * instance de l'application peut donc servir n'importe quel joueur.
  */
 export function createRealtimeApi({
-  store,
-  policies,
-  pollMs = 500,
-  maxStreamMs = 240_000,
-  retryMs = 1_000,
-  pingMs = 15_000,
-}: RealtimeOptions) {
+                                    store,
+                                    policies,
+                                    pollMs = 500,
+                                    maxStreamMs = 240_000,
+                                    retryMs = 1_000,
+                                    pingMs = 15_000,
+                                  }: RealtimeOptions) {
   return (
-    new Hono<AppEnv>()
-      // Flux SSE d'un canal.
-      .get('/:channel', async (c) => {
-        const channel = c.req.param('channel')
-        const policy = await authorize(policies, channel, c.var.userId)
-        if (!policy) return c.json(FORBIDDEN, 403)
-        const source = sourceOf(store, channel, policy)
+      new Hono<AppEnv>()
+          // Flux SSE d'un canal.
+          .get('/:channel', async (c) => {
+            const channel = c.req.param('channel')
+            const policy = await authorize(policies, channel, c.var.userId)
+            if (!policy) return c.json(FORBIDDEN, 403)
+            const source = sourceOf(store, channel, policy)
 
-        // Point de reprise : l'en-tête Last-Event-ID, envoyé par le navigateur à la reconnexion,
-        // ou à défaut le paramètre after ; sinon, l'identifiant de départ du canal.
-        let lastId = await startFrom(c.req.header('last-event-id') ?? c.req.query('after'), source)
+            // Point de reprise : l'en-tête Last-Event-ID, envoyé par le navigateur à la reconnexion,
+            // ou à défaut le paramètre after ; sinon, l'identifiant de départ du canal.
+            let lastId = await startFrom(c.req.header('last-event-id') ?? c.req.query('after'), source)
 
-        return streamSSE(c, async (stream) => {
-          let aborted = false
-          stream.onAbort(() => {
-            aborted = true
-          })
-          const deadline = Date.now() + maxStreamMs
-          let lastWrite = Date.now()
-
-          // Premier message : le flux est ouvert, et le délai de reconnexion est communiqué.
-          await stream.writeSSE({ event: 'ready', data: String(lastId), retry: retryMs })
-
-          // Tant que le navigateur est connecté et que la durée maximale n'est pas atteinte,
-          // le journal est relu et chaque nouvel événement est transmis.
-          while (!aborted && Date.now() < deadline) {
-            const fresh = await source.read(lastId)
-            for (const event of fresh) {
-              // L'identifiant SSE de l'événement est celui que le navigateur renverra
-              // dans Last-Event-ID après une interruption.
-              lastId = source.idOf(event)
-              await stream.writeSSE({
-                id: String(lastId),
-                event: 'domain-event',
-                data: JSON.stringify(present(event, policy)),
+            return streamSSE(c, async (stream) => {
+              let aborted = false
+              stream.onAbort(() => {
+                aborted = true
               })
-              lastWrite = Date.now()
-            }
-            // Signe de vie : un commentaire SSE, ignoré par le navigateur, qui empêche
-            // les intermédiaires du réseau de fermer une connexion jugée inactive.
-            if (Date.now() - lastWrite > pingMs) {
-              await stream.write(': ping\n\n')
-              lastWrite = Date.now()
-            }
-            await stream.sleep(pollMs)
-          }
-          // À la sortie de la boucle, la réponse se termine : le navigateur se reconnectera.
-        })
-      })
+              const deadline = Date.now() + maxStreamMs
+              let lastWrite = Date.now()
 
-      // Repli sans diffusion progressive : les événements du canal postérieurs à after.
-      .get('/:channel/events', async (c) => {
-        const channel = c.req.param('channel')
-        const policy = await authorize(policies, channel, c.var.userId)
-        if (!policy) return c.json(FORBIDDEN, 403)
-        const source = sourceOf(store, channel, policy)
-        const events = await source.read(await startFrom(c.req.query('after'), source))
-        return c.json({ events: events.map((event) => present(event, policy)) })
-      })
+              // Premier message : le flux est ouvert, et le délai de reconnexion est communiqué.
+              await stream.writeSSE({ event: 'ready', data: String(lastId), retry: retryMs })
+
+              // Tant que le navigateur est connecté et que la durée maximale n'est pas atteinte,
+              // le journal est relu et chaque nouvel événement est transmis.
+              while (!aborted && Date.now() < deadline) {
+                const fresh = await source.read(lastId)
+                for (const event of fresh) {
+                  // L'identifiant SSE de l'événement est celui que le navigateur renverra
+                  // dans Last-Event-ID après une interruption.
+                  lastId = source.idOf(event)
+                  await stream.writeSSE({
+                    id: String(lastId),
+                    event: 'domain-event',
+                    data: JSON.stringify(present(event, policy)),
+                  })
+                  lastWrite = Date.now()
+                }
+                // Signe de vie : un commentaire SSE, ignoré par le navigateur, qui empêche
+                // les intermédiaires du réseau de fermer une connexion jugée inactive.
+                if (Date.now() - lastWrite > pingMs) {
+                  await stream.write(': ping\n\n')
+                  lastWrite = Date.now()
+                }
+                await stream.sleep(pollMs)
+              }
+              // À la sortie de la boucle, la réponse se termine : le navigateur se reconnectera.
+            })
+          })
+
+          // Repli sans diffusion progressive : les événements du canal postérieurs à after.
+          .get('/:channel/events', async (c) => {
+            const channel = c.req.param('channel')
+            const policy = await authorize(policies, channel, c.var.userId)
+            if (!policy) return c.json(FORBIDDEN, 403)
+            const source = sourceOf(store, channel, policy)
+            const events = await source.read(await startFrom(c.req.query('after'), source))
+            return c.json({ events: events.map((event) => present(event, policy)) })
+          })
   )
 }
