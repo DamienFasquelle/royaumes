@@ -14,7 +14,7 @@ module.exports = {
       // « $1 » reprend le nom du module d'origine, capturé dans « from ».
       name: 'module-encapsulation',
       comment:
-          "Un module n'importe jamais l'intérieur d'un autre module, seulement ses entrées publiques.",
+        "Un module n'importe jamais l'intérieur d'un autre module, seulement ses entrées publiques.",
       severity: 'error',
       from: { path: '^src/modules/([^/]+)/' },
       to: { path: '^src/modules/[^/]+/', pathNot: ['^src/modules/$1/', PUBLIC_ENTRIES] },
@@ -48,7 +48,7 @@ module.exports = {
       // Règle 3 : la plateforme est générique et ignore les modules métier.
       name: 'platform-ignores-modules',
       comment:
-          'La plateforme technique ne connaît aucun module métier ni la racine de composition.',
+        'La plateforme technique ne connaît aucun module métier ni la racine de composition.',
       severity: 'error',
       from: { path: '^src/platform/' },
       to: { path: '^src/(modules|bootstrap)/' },
@@ -58,7 +58,7 @@ module.exports = {
       // Les importations de types sont autorisées : elles disparaissent à la compilation.
       name: 'client-without-server-code',
       comment:
-          "Le code client (ui.tsx, src/ui) n'importe jamais de code serveur ; seuls les types sont autorisés.",
+        "Le code client (ui.tsx, src/ui) n'importe jamais de code serveur ; seuls les types sont autorisés.",
       severity: 'error',
       from: { path: '(^src/modules/[^/]+/ui\\.tsx$)|(^src/ui/)' },
       to: {
@@ -82,7 +82,7 @@ module.exports = {
       // il n'importe jamais leurs tables. Seule la plateforme peut ainsi modifier un événement.
       name: 'platform-tables-are-private',
       comment:
-          "Un module n'importe jamais les tables de la plateforme : il passe par ses fonctions.",
+        "Un module n'importe jamais les tables de la plateforme : il passe par ses fonctions.",
       severity: 'error',
       from: { path: '^src/modules/' },
       to: { path: '^src/platform/[^/]+/schema\\.ts$' },

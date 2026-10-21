@@ -39,8 +39,8 @@ export const toOutboxRow = (message: NewMessage) => ({
   topic: message.topic,
   payload: message.payload,
   ...(message.delayMs
-      ? { availableAt: sql`now() + make_interval(secs => ${message.delayMs / 1000})` }
-      : {}),
+    ? { availableAt: sql`now() + make_interval(secs => ${message.delayMs / 1000})` }
+    : {}),
 })
 
 export interface DispatcherOptions {
@@ -65,14 +65,14 @@ const retryDelayMs = (attempt: number) => Math.min(2 ** attempt * 1000, 3_600_00
  * sujet par sujet, par la racine de composition.
  */
 export function createDispatcher(
-    db: Db,
-    {
-      maxAttempts = 10,
-      leaseMs = 30_000,
-      batchSize = 20,
-      maxMessages = 100,
-      now = () => Date.now(),
-    }: DispatcherOptions = {},
+  db: Db,
+  {
+    maxAttempts = 10,
+    leaseMs = 30_000,
+    batchSize = 20,
+    maxMessages = 100,
+    now = () => Date.now(),
+  }: DispatcherOptions = {},
 ) {
   const handlers = new Map<string, MessageHandler>()
 
@@ -102,12 +102,12 @@ export function createDispatcher(
               RETURNING id, topic, payload, attempts`)
     const rows = (result as unknown as { rows: Record<string, unknown>[] }).rows
     return rows.map(
-        (row): Message => ({
-          id: row.id as string,
-          topic: row.topic as string,
-          payload: row.payload as Record<string, unknown>,
-          attempt: row.attempts as number,
-        }),
+      (row): Message => ({
+        id: row.id as string,
+        topic: row.topic as string,
+        payload: row.payload as Record<string, unknown>,
+        attempt: row.attempts as number,
+      }),
     )
   }
 
@@ -120,18 +120,18 @@ export function createDispatcher(
       // Si le distributeur est interrompu avant cette instruction, le message sera remis
       // une seconde fois à l'expiration du bail : le gestionnaire doit être idempotent.
       await db
-          .update(outbox)
-          .set({ processedAt: new Date(now()) })
-          .where(eq(outbox.id, message.id))
+        .update(outbox)
+        .set({ processedAt: new Date(now()) })
+        .where(eq(outbox.id, message.id))
       return true
     } catch (error) {
       await db
-          .update(outbox)
-          .set({
-            availableAt: new Date(now() + retryDelayMs(message.attempt)),
-            lastError: error instanceof Error ? error.message : String(error),
-          })
-          .where(eq(outbox.id, message.id))
+        .update(outbox)
+        .set({
+          availableAt: new Date(now() + retryDelayMs(message.attempt)),
+          lastError: error instanceof Error ? error.message : String(error),
+        })
+        .where(eq(outbox.id, message.id))
       return false
     }
   }
@@ -158,12 +158,12 @@ export function createDispatcher(
   /** Nombre de messages en attente, et de messages abandonnés après trop de tentatives. */
   async function status() {
     const [row] = await db
-        .select({
-          pending: sql<number>`count(*) filter (where ${outbox.attempts} < ${maxAttempts})`,
-          abandoned: sql<number>`count(*) filter (where ${outbox.attempts} >= ${maxAttempts})`,
-        })
-        .from(outbox)
-        .where(isNull(outbox.processedAt))
+      .select({
+        pending: sql<number>`count(*) filter (where ${outbox.attempts} < ${maxAttempts})`,
+        abandoned: sql<number>`count(*) filter (where ${outbox.attempts} >= ${maxAttempts})`,
+      })
+      .from(outbox)
+      .where(isNull(outbox.processedAt))
     return { pending: Number(row.pending), abandoned: Number(row.abandoned) }
   }
 
@@ -174,17 +174,17 @@ export function createDispatcher(
    */
   function abandoned() {
     return db
-        .select({
-          id: outbox.id,
-          topic: outbox.topic,
-          payload: outbox.payload,
-          attempts: outbox.attempts,
-          lastError: outbox.lastError,
-          createdAt: outbox.createdAt,
-        })
-        .from(outbox)
-        .where(and(isNull(outbox.processedAt), gte(outbox.attempts, maxAttempts)))
-        .orderBy(asc(outbox.createdAt))
+      .select({
+        id: outbox.id,
+        topic: outbox.topic,
+        payload: outbox.payload,
+        attempts: outbox.attempts,
+        lastError: outbox.lastError,
+        createdAt: outbox.createdAt,
+      })
+      .from(outbox)
+      .where(and(isNull(outbox.processedAt), gte(outbox.attempts, maxAttempts)))
+      .orderBy(asc(outbox.createdAt))
   }
 
   /**
@@ -194,10 +194,10 @@ export function createDispatcher(
    */
   async function retry(id: string) {
     const updated = await db
-        .update(outbox)
-        .set({ attempts: 0, availableAt: new Date(now()), lastError: null })
-        .where(and(eq(outbox.id, id), isNull(outbox.processedAt), gte(outbox.attempts, maxAttempts)))
-        .returning({ id: outbox.id })
+      .update(outbox)
+      .set({ attempts: 0, availableAt: new Date(now()), lastError: null })
+      .where(and(eq(outbox.id, id), isNull(outbox.processedAt), gte(outbox.attempts, maxAttempts)))
+      .returning({ id: outbox.id })
     return updated.length === 1
   }
 

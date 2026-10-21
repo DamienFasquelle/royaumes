@@ -18,15 +18,15 @@ const dispatcher = createDispatcher(db)
 const [command, id] = process.argv.slice(2)
 
 if (command === 'retry' && id) {
-    const done = await dispatcher.retry(id)
-    console.log(done ? `Message ${id} relancé.` : `Message ${id} introuvable, ou non abandonné.`)
+  const done = await dispatcher.retry(id)
+  console.log(done ? `Message ${id} relancé.` : `Message ${id} introuvable, ou non abandonné.`)
 } else {
-    const messages = await dispatcher.abandoned()
-    if (messages.length === 0) console.log('Aucun message abandonné.')
-    for (const m of messages) {
-        console.log(`${m.id}  ${m.topic}  ${m.attempts} tentatives  ${m.createdAt.toISOString()}`)
-        console.log(`  contenu : ${JSON.stringify(m.payload)}`)
-        console.log(`  dernière erreur : ${m.lastError}`)
-    }
+  const messages = await dispatcher.abandoned()
+  if (messages.length === 0) console.log('Aucun message abandonné.')
+  for (const m of messages) {
+    console.log(`${m.id}  ${m.topic}  ${m.attempts} tentatives  ${m.createdAt.toISOString()}`)
+    console.log(`  contenu : ${JSON.stringify(m.payload)}`)
+    console.log(`  dernière erreur : ${m.lastError}`)
+  }
 }
 process.exit(0)

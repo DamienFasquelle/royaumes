@@ -125,12 +125,35 @@ export function createProjectionRunner(
   }
 
   /**
+   * Vérifie, par une simple lecture, que la projection n'a rien à faire : son point de reprise
+   * existe, sa version n'est pas plus ancienne, et aucun événement ne le suit. La consultation
+   * courante n'ouvre alors ni verrou ni transaction d'écriture. En cas de doute, le rattrapage
+   * complet, sous verrou, tranche.
+   */
+  async function upToDate(projection: Projection) {
+    const [checkpoint] = await db
+      .select()
+      .from(projections)
+      .where(eq(projections.name, projection.name))
+    if (!checkpoint) return false
+    if (checkpoint.version > projection.version) return true
+    if (checkpoint.version < projection.version) return false
+    const [next] = await db
+      .select({ position: events.position })
+      .from(events)
+      .where(gt(events.position, checkpoint.position))
+      .limit(1)
+    return !next
+  }
+
+  /**
    * Applique à la projection les événements enregistrés depuis son point de reprise,
    * et renvoie le nombre d'événements appliqués. Tout a lieu dans une seule transaction :
    * les tables et le point de reprise sont mis à jour ensemble, ou pas du tout.
    * Si la version de la projection a changé, ses tables sont d'abord reconstruites.
    */
   async function catchUp(projection: Projection): Promise<number> {
+    if (await upToDate(projection)) return 0
     return db.transaction(async (tx) => {
       const checkpoint = await lock(tx, projection)
 

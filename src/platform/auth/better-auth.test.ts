@@ -18,11 +18,11 @@ beforeEach(async () => {
 /** Envoie une requête JSON à une route d'authentification. */
 function post(path: string, body: unknown) {
   return auth.handler(
-      new Request(`${AUTH}${path}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', origin: 'http://localhost:3000' },
-        body: JSON.stringify(body),
-      }),
+    new Request(`${AUTH}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:3000' },
+      body: JSON.stringify(body),
+    }),
   )
 }
 
@@ -71,10 +71,10 @@ describe('Revue de sécurité', () => {
   it("ne conserve qu'une empreinte du mot de passe", async () => {
     await post('/sign-up/email', alice)
     const [row] = await db
-        .select({ password: account.password })
-        .from(account)
-        .innerJoin(user, eq(account.userId, user.id))
-        .where(eq(user.email, alice.email))
+      .select({ password: account.password })
+      .from(account)
+      .innerJoin(user, eq(account.userId, user.id))
+      .where(eq(user.email, alice.email))
 
     expect(row.password).toBeTruthy()
     expect(row.password).not.toContain(alice.password)
@@ -104,17 +104,17 @@ describe('Revue de sécurité', () => {
 describe('Limitation des tentatives', () => {
   /** Tentative de connexion avec un mauvais mot de passe, depuis une adresse IP donnée. */
   const attempt = (instance: AuthPort) =>
-      instance.handler(
-          new Request(`${AUTH}/sign-in/email`, {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              origin: 'http://localhost:3000',
-              'x-forwarded-for': '203.0.113.7',
-            },
-            body: JSON.stringify({ email: 'inconnu@example.com', password: 'mauvais-mot' }),
-          }),
-      )
+    instance.handler(
+      new Request(`${AUTH}/sign-in/email`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          origin: 'http://localhost:3000',
+          'x-forwarded-for': '203.0.113.7',
+        },
+        body: JSON.stringify({ email: 'inconnu@example.com', password: 'mauvais-mot' }),
+      }),
+    )
 
   it('conserve les compteurs dans la base, où toutes les instances les partagent', async () => {
     const statuses: number[] = []

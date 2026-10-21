@@ -37,7 +37,7 @@ describe("Boîte d'envoi : enregistrement", () => {
   it("n'enregistre aucun message si les événements sont refusés", async () => {
     await store.append('s-1', 0, [{ type: 'A', data: {} }])
     await expect(
-        store.append('s-1', 0, [{ type: 'B', data: {} }], [ping(1)]),
+      store.append('s-1', 0, [{ type: 'B', data: {} }], [ping(1)]),
     ).rejects.toBeInstanceOf(ConcurrencyError)
 
     expect(await db.select().from(outbox)).toEqual([])

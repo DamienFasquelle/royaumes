@@ -15,8 +15,8 @@ function vercelOrigins(): string[] {
     process.env.VERCEL_BRANCH_URL,
     process.env.VERCEL_URL,
   ]
-      .filter((host): host is string => Boolean(host))
-      .map((host) => `https://${host}`)
+    .filter((host): host is string => Boolean(host))
+    .map((host) => `https://${host}`)
 }
 
 /**
