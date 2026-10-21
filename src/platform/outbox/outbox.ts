@@ -1,4 +1,4 @@
-import { eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, gte, isNull, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import { outbox } from './schema'
 
@@ -39,8 +39,8 @@ export const toOutboxRow = (message: NewMessage) => ({
   topic: message.topic,
   payload: message.payload,
   ...(message.delayMs
-    ? { availableAt: sql`now() + make_interval(secs => ${message.delayMs / 1000})` }
-    : {}),
+      ? { availableAt: sql`now() + make_interval(secs => ${message.delayMs / 1000})` }
+      : {}),
 })
 
 export interface DispatcherOptions {
@@ -65,14 +65,14 @@ const retryDelayMs = (attempt: number) => Math.min(2 ** attempt * 1000, 3_600_00
  * sujet par sujet, par la racine de composition.
  */
 export function createDispatcher(
-  db: Db,
-  {
-    maxAttempts = 10,
-    leaseMs = 30_000,
-    batchSize = 20,
-    maxMessages = 100,
-    now = () => Date.now(),
-  }: DispatcherOptions = {},
+    db: Db,
+    {
+      maxAttempts = 10,
+      leaseMs = 30_000,
+      batchSize = 20,
+      maxMessages = 100,
+      now = () => Date.now(),
+    }: DispatcherOptions = {},
 ) {
   const handlers = new Map<string, MessageHandler>()
 
@@ -102,12 +102,12 @@ export function createDispatcher(
               RETURNING id, topic, payload, attempts`)
     const rows = (result as unknown as { rows: Record<string, unknown>[] }).rows
     return rows.map(
-      (row): Message => ({
-        id: row.id as string,
-        topic: row.topic as string,
-        payload: row.payload as Record<string, unknown>,
-        attempt: row.attempts as number,
-      }),
+        (row): Message => ({
+          id: row.id as string,
+          topic: row.topic as string,
+          payload: row.payload as Record<string, unknown>,
+          attempt: row.attempts as number,
+        }),
     )
   }
 
@@ -120,18 +120,18 @@ export function createDispatcher(
       // Si le distributeur est interrompu avant cette instruction, le message sera remis
       // une seconde fois à l'expiration du bail : le gestionnaire doit être idempotent.
       await db
-        .update(outbox)
-        .set({ processedAt: new Date(now()) })
-        .where(eq(outbox.id, message.id))
+          .update(outbox)
+          .set({ processedAt: new Date(now()) })
+          .where(eq(outbox.id, message.id))
       return true
     } catch (error) {
       await db
-        .update(outbox)
-        .set({
-          availableAt: new Date(now() + retryDelayMs(message.attempt)),
-          lastError: error instanceof Error ? error.message : String(error),
-        })
-        .where(eq(outbox.id, message.id))
+          .update(outbox)
+          .set({
+            availableAt: new Date(now() + retryDelayMs(message.attempt)),
+            lastError: error instanceof Error ? error.message : String(error),
+          })
+          .where(eq(outbox.id, message.id))
       return false
     }
   }
@@ -158,16 +158,50 @@ export function createDispatcher(
   /** Nombre de messages en attente, et de messages abandonnés après trop de tentatives. */
   async function status() {
     const [row] = await db
-      .select({
-        pending: sql<number>`count(*) filter (where ${outbox.attempts} < ${maxAttempts})`,
-        abandoned: sql<number>`count(*) filter (where ${outbox.attempts} >= ${maxAttempts})`,
-      })
-      .from(outbox)
-      .where(isNull(outbox.processedAt))
+        .select({
+          pending: sql<number>`count(*) filter (where ${outbox.attempts} < ${maxAttempts})`,
+          abandoned: sql<number>`count(*) filter (where ${outbox.attempts} >= ${maxAttempts})`,
+        })
+        .from(outbox)
+        .where(isNull(outbox.processedAt))
     return { pending: Number(row.pending), abandoned: Number(row.abandoned) }
   }
 
-  return { register, dispatch, status }
+  /**
+   * Messages abandonnés après le nombre maximal de tentatives (lettres mortes), avec la cause
+   * de leur dernier échec. Destinés à l'exploitation : ils permettent de diagnostiquer
+   * une saga interrompue.
+   */
+  function abandoned() {
+    return db
+        .select({
+          id: outbox.id,
+          topic: outbox.topic,
+          payload: outbox.payload,
+          attempts: outbox.attempts,
+          lastError: outbox.lastError,
+          createdAt: outbox.createdAt,
+        })
+        .from(outbox)
+        .where(and(isNull(outbox.processedAt), gte(outbox.attempts, maxAttempts)))
+        .orderBy(asc(outbox.createdAt))
+  }
+
+  /**
+   * Relance un message abandonné, une fois la cause de ses échecs corrigée : son nombre de
+   * tentatives est remis à zéro, et il sera remis à la prochaine distribution.
+   * Renvoie faux si le message n'existe pas, ou n'est pas abandonné.
+   */
+  async function retry(id: string) {
+    const updated = await db
+        .update(outbox)
+        .set({ attempts: 0, availableAt: new Date(now()), lastError: null })
+        .where(and(eq(outbox.id, id), isNull(outbox.processedAt), gte(outbox.attempts, maxAttempts)))
+        .returning({ id: outbox.id })
+    return updated.length === 1
+  }
+
+  return { register, dispatch, status, abandoned, retry }
 }
 
 /** Type du distributeur, déduit de sa fabrique. */

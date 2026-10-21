@@ -1,4 +1,4 @@
-import { boolean, pgSchema, text, timestamp } from 'drizzle-orm/pg-core'
+import { bigint, boolean, integer, pgSchema, text, timestamp } from 'drizzle-orm/pg-core'
 
 /**
  * Tables attendues par Better Auth, rangées dans le schéma PostgreSQL « identity ».
@@ -28,8 +28,8 @@ export const session = identity.table('session', {
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
   userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
 })
 
 /**
@@ -41,8 +41,8 @@ export const account = identity.table('account', {
   accountId: text('account_id').notNull(),
   providerId: text('provider_id').notNull(),
   userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
   accessToken: text('access_token'),
   refreshToken: text('refresh_token'),
   idToken: text('id_token'),
@@ -62,4 +62,16 @@ export const verification = identity.table('verification', {
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
+
+/**
+ * Compteurs de la limitation des tentatives (TD11). Ils sont conservés dans la base, et donc
+ * partagés par toutes les instances de l'application. Une ligne par clé : une route et une
+ * adresse IP ; lastRequest est l'instant de la dernière tentative, en millisecondes.
+ */
+export const rateLimit = identity.table('rate_limit', {
+  id: text('id').primaryKey(),
+  key: text('key').notNull().unique(),
+  count: integer('count').notNull(),
+  lastRequest: bigint('last_request', { mode: 'number' }).notNull(),
 })

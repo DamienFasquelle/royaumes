@@ -45,15 +45,15 @@ export interface ApiDeps {
  * Ajouter un module consiste à l'instancier ici, puis à monter son API.
  */
 export function createApi({
-  auth,
-  db,
-  store,
-  ready,
-  clock,
-  realtime,
-  cronSecret,
-  outbox,
-}: ApiDeps) {
+                            auth,
+                            db,
+                            store,
+                            ready,
+                            clock,
+                            realtime,
+                            cronSecret,
+                            outbox,
+                          }: ApiDeps) {
   // 0. Briques de la plateforme partagées par plusieurs modules.
   const projections = createProjectionRunner(db)
   // Distributeur de la boîte d'envoi : les modules lui confient leurs gestionnaires de messages.
@@ -78,16 +78,16 @@ export function createApi({
   // Droits des joueurs : chaque module fournit ses données personnelles. L'identité vient
   // en dernier : tant qu'elle n'est pas effacée, le joueur peut relancer un effacement interrompu.
   const privacy = createPrivacyService(
-    db,
-    [
-      realm.personalData,
-      dungeon.personalData,
-      market.personalData,
-      ranking.personalData,
-      tavern.personalData,
-      createIdentityPersonalData(db),
-    ],
-    clock,
+      db,
+      [
+        realm.personalData,
+        dungeon.personalData,
+        market.personalData,
+        ranking.personalData,
+        tavern.personalData,
+        createIdentityPersonalData(db),
+      ],
+      clock,
   )
 
   // Gestionnaires de messages, déclarés par les modules et confiés au distributeur.
@@ -130,18 +130,24 @@ export function createApi({
   // Tâches quotidiennes : réservées à la tâche planifiée de Vercel, qui s'authentifie
   // par un secret, et non par une session de joueur.
   app.route(
-    '/cron',
-    createCronApi(
-      {
-        // Distribution des messages restés en attente dans la boîte d'envoi.
-        // DETTE TECHNIQUE DT-007 (docs/qualite/dette-technique.md) : les messages abandonnés
-        // sont seulement comptés ; aucun outil ne permet de les examiner ni de les relancer.
-        outbox: async () => ({ ...(await dispatcher.dispatch()), ...(await dispatcher.status()) }),
-        // Durée de conservation des données de la Taverne.
-        tavern: tavern.dailyTask,
-      },
-      cronSecret,
-    ),
+      '/cron',
+      createCronApi(
+          {
+            // Distribution des messages restés en attente dans la boîte d'envoi. Des messages
+            // abandonnés produisent un avertissement dans les journaux : ils demandent un examen,
+            // par le script scripts/dead-letters.ts.
+            outbox: async () => {
+              const result = { ...(await dispatcher.dispatch()), ...(await dispatcher.status()) }
+              if (result.abandoned > 0) {
+                console.warn(`Boîte d'envoi : ${result.abandoned} message(s) abandonné(s) à examiner`)
+              }
+              return result
+            },
+            // Durée de conservation des données de la Taverne.
+            tavern: tavern.dailyTask,
+          },
+          cronSecret,
+      ),
   )
 
   // 6. Routes réservées aux joueurs connectés : toute requête anonyme est refusée (401).
@@ -158,14 +164,14 @@ export function createApi({
   // 7. Montage des sous-applications : chaque module reçoit son propre préfixe.
   //    Les appels sont chaînés afin que TypeScript conserve le type de chaque route.
   return app
-    .route('/system', system.api)
-    .route('/realm', realm.api)
-    .route('/dungeon', dungeon.api)
-    .route('/ranking', ranking.api)
-    .route('/market', market.api)
-    .route('/tavern', tavern.api)
-    .route('/account', createPrivacyApi(privacy))
-    .route('/stream', createRealtimeApi({ store, policies, ...realtime }))
+      .route('/system', system.api)
+      .route('/realm', realm.api)
+      .route('/dungeon', dungeon.api)
+      .route('/ranking', ranking.api)
+      .route('/market', market.api)
+      .route('/tavern', tavern.api)
+      .route('/account', createPrivacyApi(privacy))
+      .route('/stream', createRealtimeApi({ store, policies, ...realtime }))
 }
 
 /** Type de l'application complète, déduit de ses routes. */

@@ -3,6 +3,7 @@ import type { Db } from '@/platform/db/client'
 import type { PersonalDataContributor } from '@/platform/privacy/privacy'
 import { messages, presence } from './infrastructure/schema'
 
+
 /**
  * Données personnelles de la Taverne : les messages du joueur et sa présence.
  * La Taverne n'enregistre pas d'événements : l'effacement est une simple suppression.
