@@ -1,101 +1,174 @@
-import { asc, eq, gt, sql } from 'drizzle-orm'
+import { asc, eq, gt } from 'drizzle-orm'
 import type { Db } from '../db/client'
-import { type StoredEvent, toStored } from '../event-store/event-store'
+import type { StoredEvent } from '../event-store/event-store'
 import { events } from '../event-store/schema'
 import { projections } from './schema'
 
-/** Transaction ouverte par le moteur, dans laquelle une projection met à jour ses tables. */
+/** Transaction de base de données, dans laquelle une projection met à jour ses tables. */
 export type DbTransaction = Parameters<Parameters<Db['transaction']>[0]>[0]
 
-/**
- * Projection : modèle de lecture tenu à jour à partir du journal.
- * apply est appelée pour chaque événement de l'un des types déclarés, dans l'ordre global,
- * à l'intérieur de la transaction qui fait aussi avancer le point de reprise.
- */
+/** Projection : construit un modèle de lecture à partir des événements du journal. */
 export interface Projection {
   /** Nom unique, qui identifie le point de reprise de la projection. */
   name: string
-  /** Types d'événements traités ; les autres sont ignorés. */
-  eventTypes: string[]
-  apply(event: StoredEvent, tx: DbTransaction): Promise<void>
-}
-
-/** Moteur des projections, partagé par les modules. */
-export interface ProjectionRunner {
   /**
-   * Applique à la projection les événements postérieurs à son point de reprise,
-   * puis avance ce point. Renvoie le nombre d'événements appliqués.
+   * Version de la projection. Elle est augmentée à chaque modification qui change le contenu
+   * de ses tables : nouvelle colonne, correction d'une règle. Une version différente de celle
+   * qui a construit les tables provoque leur reconstruction.
    */
-  catchUp(projection: Projection): Promise<number>
-  /** Position du dernier événement traité par la projection ; 0 si elle n'a encore rien traité. */
-  positionOf(name: string): Promise<number>
+  version: number
+  /** Types d'événements traités ; les autres sont ignorés, mais le point de reprise avance. */
+  eventTypes: string[]
+  /**
+   * Applique un événement aux tables du modèle de lecture.
+   * Toutes les écritures passent par tx : elles sont validées ou annulées
+   * en même temps que le nouveau point de reprise.
+   */
+  apply(event: StoredEvent, tx: DbTransaction): Promise<void>
+  /** Vide les tables du modèle de lecture, avant leur reconstruction à partir du journal. */
+  reset(tx: DbTransaction): Promise<void>
 }
 
 export interface ProjectionRunnerOptions {
-  /** Horloge, en millisecondes ; l'heure réelle par défaut. Remplacée dans les tests. */
-  now?: () => number
   /**
-   * Délai au-delà duquel une position manquante est considérée comme définitivement perdue.
-   * Une position est attribuée au début d'une insertion : tant que celle-ci n'est pas validée,
-   * ou si elle est annulée, la position manque. Un écart récent peut donc encore se combler.
+   * Délai, en millisecondes, pendant lequel une position manquante est considérée comme
+   * une insertion encore en cours : la projection s'arrête devant elle et l'attend.
    */
-  gapTimeoutMs?: number
+  gapGraceMs?: number
+  /** Nombre d'événements lus à la fois. */
+  batchSize?: number
+  /** Horloge, remplacée dans les tests pour simuler l'écoulement du temps. */
+  now?: () => number
 }
 
-/** Moteur des projections fondé sur les tables platform.events et platform.projections. */
-export function createProjectionRunner(
-  db: Db,
-  { now = Date.now, gapTimeoutMs = 5_000 }: ProjectionRunnerOptions = {},
-): ProjectionRunner {
-  return {
-    catchUp(projection) {
-      return db.transaction(async (tx) => {
-        // Le point de reprise est verrouillé : deux rattrapages simultanés de la même projection
-        // s'exécutent l'un après l'autre, et chaque événement n'est appliqué qu'une fois.
-        await tx.insert(projections).values({ name: projection.name }).onConflictDoNothing()
-        const [checkpoint] = await tx
-          .select({ position: projections.position })
-          .from(projections)
-          .where(eq(projections.name, projection.name))
-          .for('update')
+/** Convertit une ligne du journal en événement enregistré. */
+const toStored = (row: typeof events.$inferSelect): StoredEvent => ({
+  position: row.position,
+  stream: row.stream,
+  version: row.version,
+  type: row.type,
+  data: row.data as Record<string, unknown>,
+  occurredAt: row.occurredAt,
+})
 
-        // Tous les types sont lus, afin de repérer les positions manquantes.
-        const rows = await tx
+/**
+ * Moteur des projections : rattrape le journal pour une projection donnée,
+ * en appliquant chaque événement exactement une fois.
+ */
+export function createProjectionRunner(
+    db: Db,
+    { gapGraceMs = 5_000, batchSize = 200, now = () => Date.now() }: ProjectionRunnerOptions = {},
+) {
+  /**
+   * Crée au besoin le point de reprise de la projection, puis le verrouille jusqu'à la fin
+   * de la transaction : un second rattrapage simultané attend celui-ci.
+   * Une projection nouvelle reçoit d'emblée sa version : elle n'a rien à reconstruire.
+   */
+  async function lock(tx: DbTransaction, projection: Projection) {
+    await tx
+        .insert(projections)
+        .values({ name: projection.name, version: projection.version })
+        .onConflictDoNothing()
+    const [checkpoint] = await tx
+        .select()
+        .from(projections)
+        .where(eq(projections.name, projection.name))
+        .for('update')
+    return checkpoint
+  }
+
+  /**
+   * Applique à la projection les événements postérieurs à la position from, puis enregistre
+   * le nouveau point de reprise et la version de la projection. Renvoie le nombre
+   * d'événements appliqués.
+   */
+  async function advance(tx: DbTransaction, projection: Projection, from: number) {
+    let position = from
+    let applied = 0
+
+    // Les événements postérieurs sont lus par lots, dans l'ordre global du journal.
+    // Tous les types sont lus : un écart de positions ne peut être détecté que sur la suite
+    // complète des positions.
+    for (;;) {
+      const rows = await tx
           .select()
           .from(events)
-          .where(gt(events.position, checkpoint.position))
+          .where(gt(events.position, position))
           .orderBy(asc(events.position))
+          .limit(batchSize)
 
-        let position = checkpoint.position
-        let applied = 0
-        for (const row of rows) {
-          // Écart récent : l'événement manquant peut encore être validé. On s'arrête devant lui.
-          const gap = row.position !== position + 1
-          if (gap && now() - row.occurredAt.getTime() < gapTimeoutMs) break
-
-          if (projection.eventTypes.includes(row.type)) {
-            await projection.apply(toStored(row), tx)
-            applied++
-          }
-          position = row.position
+      let blocked = false
+      for (const row of rows) {
+        // Une position manque avant cet événement. Si l'événement est récent, l'insertion
+        // manquante est peut-être encore en cours : la projection s'arrête et l'attendra.
+        // S'il est ancien, la position manquante correspond à une insertion annulée.
+        const gap = row.position !== position + 1
+        if (gap && now() - row.occurredAt.getTime() < gapGraceMs) {
+          blocked = true
+          break
         }
-
-        if (position !== checkpoint.position) {
-          await tx
-            .update(projections)
-            .set({ position, updatedAt: sql`now()` })
-            .where(eq(projections.name, projection.name))
+        if (projection.eventTypes.includes(row.type)) {
+          await projection.apply(toStored(row), tx)
+          applied++
         }
-        return applied
-      })
-    },
+        position = row.position
+      }
+      if (blocked || rows.length < batchSize) break
+    }
 
-    async positionOf(name) {
-      const [row] = await db
-        .select({ position: projections.position })
-        .from(projections)
-        .where(eq(projections.name, name))
-      return row?.position ?? 0
-    },
+    // Le nouveau point de reprise est enregistré dans la même transaction que les tables.
+    await tx
+        .update(projections)
+        .set({ position, version: projection.version, updatedAt: new Date() })
+        .where(eq(projections.name, projection.name))
+    return applied
   }
+
+  /**
+   * Applique à la projection les événements enregistrés depuis son point de reprise,
+   * et renvoie le nombre d'événements appliqués. Tout a lieu dans une seule transaction :
+   * les tables et le point de reprise sont mis à jour ensemble, ou pas du tout.
+   * Si la version de la projection a changé, ses tables sont d'abord reconstruites.
+   */
+  async function catchUp(projection: Projection): Promise<number> {
+    return db.transaction(async (tx) => {
+      const checkpoint = await lock(tx, projection)
+
+      // Les tables ont été construites par une version plus récente : ce code est ancien,
+      // par exemple pendant un déploiement. Il ne les modifie pas, et les lit telles quelles.
+      if (checkpoint.version > projection.version) return 0
+
+      // La projection a évolué depuis la construction de ses tables : elles sont vidées,
+      // et le journal est relu depuis le début.
+      if (checkpoint.version < projection.version) {
+        await projection.reset(tx)
+        return advance(tx, projection, 0)
+      }
+      return advance(tx, projection, checkpoint.position)
+    })
+  }
+
+  /**
+   * Reconstruit entièrement la projection : ses tables sont vidées, puis le journal est relu
+   * depuis le début. Tout a lieu dans une seule transaction : aucune lecture ne voit jamais
+   * des tables vides ou à moitié reconstruites.
+   */
+  async function rebuild(projection: Projection): Promise<number> {
+    return db.transaction(async (tx) => {
+      await lock(tx, projection)
+      await projection.reset(tx)
+      return advance(tx, projection, 0)
+    })
+  }
+
+  /** Position du point de reprise d'une projection ; 0 si elle n'a jamais été rattrapée. */
+  async function positionOf(name: string): Promise<number> {
+    const [row] = await db.select().from(projections).where(eq(projections.name, name))
+    return row?.position ?? 0
+  }
+
+  return { catchUp, rebuild, positionOf }
 }
+
+/** Type du moteur des projections, déduit de sa fabrique. */
+export type ProjectionRunner = ReturnType<typeof createProjectionRunner>

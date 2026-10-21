@@ -32,15 +32,16 @@ const idFrom = (event: StoredEvent, prefix: string) => event.stream.slice(prefix
 /** Enregistre le nom d'un joueur, et sa participation à une expédition. */
 async function recordPlayer(tx: DbTransaction, gameId: string, playerId: string, name: string) {
   await tx
-    .insert(players)
-    .values({ playerId, name })
-    .onConflictDoUpdate({ target: players.playerId, set: { name } })
+      .insert(players)
+      .values({ playerId, name })
+      .onConflictDoUpdate({ target: players.playerId, set: { name } })
   await tx.insert(gamePlayers).values({ gameId, playerId }).onConflictDoNothing()
 }
 
 /** Projection du classement : met à jour les totaux des joueurs à partir du journal. */
 export const rankingProjection: Projection = {
   name: 'ranking',
+  version: 1,
   eventTypes: ['GameCreated', 'PlayerJoined', 'GameEnded', 'VillageFounded', 'BuildingUpgraded'],
 
   async apply(event, tx) {
@@ -66,13 +67,13 @@ export const rankingProjection: Projection = {
         if (ids.length > 0) {
           const won = data.result === 'won'
           await tx
-            .update(players)
-            .set({
-              gamesPlayed: sql`${players.gamesPlayed} + 1`,
-              gamesWon: sql`${players.gamesWon} + ${won ? 1 : 0}`,
-              gold: sql`${players.gold} + ${won ? data.loot : 0}`,
-            })
-            .where(inArray(players.playerId, ids))
+              .update(players)
+              .set({
+                gamesPlayed: sql`${players.gamesPlayed} + 1`,
+                gamesWon: sql`${players.gamesWon} + ${won ? 1 : 0}`,
+                gold: sql`${players.gold} + ${won ? data.loot : 0}`,
+              })
+              .where(inArray(players.playerId, ids))
         }
         // L'expédition est terminée : la liste de ses joueurs n'est plus utile.
         await tx.delete(gamePlayers).where(eq(gamePlayers.gameId, gameId))
@@ -83,23 +84,28 @@ export const rankingProjection: Projection = {
         const data = event.data as unknown as VillageFoundedData
         const playerId = idFrom(event, VILLAGE_CHANNEL_PREFIX)
         await tx
-          .insert(players)
-          .values({ playerId, village: data.name })
-          .onConflictDoUpdate({ target: players.playerId, set: { village: data.name } })
+            .insert(players)
+            .values({ playerId, village: data.name })
+            .onConflictDoUpdate({ target: players.playerId, set: { village: data.name } })
         return
       }
 
       case 'BuildingUpgraded': {
         const playerId = idFrom(event, VILLAGE_CHANNEL_PREFIX)
         await tx
-          .insert(players)
-          .values({ playerId, upgrades: 1 })
-          .onConflictDoUpdate({
-            target: players.playerId,
-            set: { upgrades: sql`${players.upgrades} + 1` },
-          })
+            .insert(players)
+            .values({ playerId, upgrades: 1 })
+            .onConflictDoUpdate({
+              target: players.playerId,
+              set: { upgrades: sql`${players.upgrades} + 1` },
+            })
         return
       }
     }
+  },
+
+  async reset(tx) {
+    await tx.delete(gamePlayers)
+    await tx.delete(players)
   },
 }
