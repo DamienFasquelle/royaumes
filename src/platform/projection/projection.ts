@@ -56,8 +56,8 @@ const toStored = (row: typeof events.$inferSelect): StoredEvent => ({
  * en appliquant chaque événement exactement une fois.
  */
 export function createProjectionRunner(
-    db: Db,
-    { gapGraceMs = 5_000, batchSize = 200, now = () => Date.now() }: ProjectionRunnerOptions = {},
+  db: Db,
+  { gapGraceMs = 5_000, batchSize = 200, now = () => Date.now() }: ProjectionRunnerOptions = {},
 ) {
   /**
    * Crée au besoin le point de reprise de la projection, puis le verrouille jusqu'à la fin
@@ -66,14 +66,14 @@ export function createProjectionRunner(
    */
   async function lock(tx: DbTransaction, projection: Projection) {
     await tx
-        .insert(projections)
-        .values({ name: projection.name, version: projection.version })
-        .onConflictDoNothing()
+      .insert(projections)
+      .values({ name: projection.name, version: projection.version })
+      .onConflictDoNothing()
     const [checkpoint] = await tx
-        .select()
-        .from(projections)
-        .where(eq(projections.name, projection.name))
-        .for('update')
+      .select()
+      .from(projections)
+      .where(eq(projections.name, projection.name))
+      .for('update')
     return checkpoint
   }
 
@@ -91,11 +91,11 @@ export function createProjectionRunner(
     // complète des positions.
     for (;;) {
       const rows = await tx
-          .select()
-          .from(events)
-          .where(gt(events.position, position))
-          .orderBy(asc(events.position))
-          .limit(batchSize)
+        .select()
+        .from(events)
+        .where(gt(events.position, position))
+        .orderBy(asc(events.position))
+        .limit(batchSize)
 
       let blocked = false
       for (const row of rows) {
@@ -118,9 +118,9 @@ export function createProjectionRunner(
 
     // Le nouveau point de reprise est enregistré dans la même transaction que les tables.
     await tx
-        .update(projections)
-        .set({ position, version: projection.version, updatedAt: new Date() })
-        .where(eq(projections.name, projection.name))
+      .update(projections)
+      .set({ position, version: projection.version, updatedAt: new Date() })
+      .where(eq(projections.name, projection.name))
     return applied
   }
 

@@ -6,6 +6,6 @@ import type { OpenGame } from '../contracts'
  * celui-là répond à une consultation (modèle de lecture).
  */
 export interface OpenGamesReader {
-    /** Expéditions qui peuvent encore être rejointes à l'instant now, les plus récentes en tête. */
-    list(now: number): Promise<OpenGame[]>
+  /** Expéditions qui peuvent encore être rejointes à l'instant now, les plus récentes en tête. */
+  list(now: number): Promise<OpenGame[]>
 }

@@ -30,13 +30,13 @@ export interface DungeonServiceOptions {
  * par un modèle de lecture (openGames).
  */
 export function createDungeonService(
-    repo: GameRepository,
-    openGames: OpenGamesReader,
-    {
-      clock = () => Date.now(),
-      newId = () => crypto.randomUUID(),
-      newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0],
-    }: DungeonServiceOptions = {},
+  repo: GameRepository,
+  openGames: OpenGamesReader,
+  {
+    clock = () => Date.now(),
+    newId = () => crypto.randomUUID(),
+    newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0],
+  }: DungeonServiceOptions = {},
 ) {
   /**
    * Traite une commande sur une expédition : charger, décider, enregistrer,
@@ -59,8 +59,8 @@ export function createDungeonService(
 
   /** Ouvre une nouvelle expédition, dont le joueur devient l'hôte, au niveau de difficulté choisi. */
   async function create(
-      player: { id: string; name: string },
-      difficulty: Difficulty = DEFAULT_DIFFICULTY,
+    player: { id: string; name: string },
+    difficulty: Difficulty = DEFAULT_DIFFICULTY,
   ) {
     const gameId = newId()
     const result = await execute(gameId, player.id, {

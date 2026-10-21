@@ -11,7 +11,7 @@ beforeEach(async () => {
   db = await createTestDatabase()
   store = createEventStore(db)
   await db.execute(
-      sql`CREATE TABLE IF NOT EXISTS test_counts (type text PRIMARY KEY, count integer NOT NULL)`,
+    sql`CREATE TABLE IF NOT EXISTS test_counts (type text PRIMARY KEY, count integer NOT NULL)`,
   )
   await db.execute(sql`TRUNCATE test_counts`)
 })
@@ -107,7 +107,7 @@ describe('Écarts de positions', () => {
   async function journalWithGap() {
     await store.append('s-1', 0, [{ type: 'A', data: {} }])
     await expect(store.append('s-1', 0, [{ type: 'A', data: {} }])).rejects.toBeInstanceOf(
-        ConcurrencyError,
+      ConcurrencyError,
     )
     await store.append('s-2', 0, [{ type: 'B', data: {} }])
   }

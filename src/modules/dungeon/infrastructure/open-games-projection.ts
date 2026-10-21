@@ -13,39 +13,39 @@ const gameIdOf = (event: StoredEvent) => event.stream.slice(GAME_CHANNEL_PREFIX.
  * ils sont donc typés par le domaine, et non décrits à nouveau comme dans le Classement.
  */
 export const openGamesProjection: Projection = {
-    name: 'dungeon-open-games',
-    version: 1,
-    eventTypes: ['GameCreated', 'PlayerJoined', 'CompanionAdded', 'GameStarted', 'GameEnded'],
+  name: 'dungeon-open-games',
+  version: 1,
+  eventTypes: ['GameCreated', 'PlayerJoined', 'CompanionAdded', 'GameStarted', 'GameEnded'],
 
-    async apply(stored, tx) {
-        const event = { type: stored.type, data: stored.data } as GameEvent
-        const gameId = gameIdOf(stored)
+  async apply(stored, tx) {
+    const event = { type: stored.type, data: stored.data } as GameEvent
+    const gameId = gameIdOf(stored)
 
-        switch (event.type) {
-            case 'GameCreated':
-                await tx
-                    .insert(openGames)
-                    .values({ gameId, hostName: event.data.hostName, heroCount: 1, createdAt: event.data.at })
-                return
+    switch (event.type) {
+      case 'GameCreated':
+        await tx
+          .insert(openGames)
+          .values({ gameId, hostName: event.data.hostName, heroCount: 1, createdAt: event.data.at })
+        return
 
-            // Un compagnon occupe une place, comme un joueur : il compte parmi les héros.
-            case 'PlayerJoined':
-            case 'CompanionAdded':
-                await tx
-                    .update(openGames)
-                    .set({ heroCount: sql`${openGames.heroCount} + 1` })
-                    .where(eq(openGames.gameId, gameId))
-                return
+      // Un compagnon occupe une place, comme un joueur : il compte parmi les héros.
+      case 'PlayerJoined':
+      case 'CompanionAdded':
+        await tx
+          .update(openGames)
+          .set({ heroCount: sql`${openGames.heroCount} + 1` })
+          .where(eq(openGames.gameId, gameId))
+        return
 
-            // Une expédition lancée, ou terminée sans avoir été lancée, ne peut plus être rejointe.
-            case 'GameStarted':
-            case 'GameEnded':
-                await tx.delete(openGames).where(eq(openGames.gameId, gameId))
-                return
-        }
-    },
+      // Une expédition lancée, ou terminée sans avoir été lancée, ne peut plus être rejointe.
+      case 'GameStarted':
+      case 'GameEnded':
+        await tx.delete(openGames).where(eq(openGames.gameId, gameId))
+        return
+    }
+  },
 
-    async reset(tx) {
-        await tx.delete(openGames)
-    },
+  async reset(tx) {
+    await tx.delete(openGames)
+  },
 }

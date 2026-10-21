@@ -1,7 +1,10 @@
-import type { RankingEntry } from '../contracts'
+import type { Ranking } from '../contracts'
 
-/** Port de lecture du classement, implémenté par l'infrastructure. */
+/**
+ * Port de lecture du Classement, défini par la couche application.
+ * Le module n'a aucune commande : il ne fait que lire un modèle de lecture.
+ */
 export interface RankingReader {
-  /** Les meilleurs joueurs, au plus limit, du premier au dernier. */
-  top(limit: number): Promise<RankingEntry[]>
+  /** Les meilleurs joueurs, à jour au moment de l'appel, et la position atteinte. */
+  top(limit: number): Promise<Ranking>
 }
