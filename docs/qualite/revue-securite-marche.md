@@ -20,3 +20,5 @@
 ## Synthèse
 
 Nombre d'exigences conformes, non conformes et en risque accepté ; actions décidées.
+
+Test « refuse une requête sans le secret attendu, et reste fermée sans secret configuré (401) » ; `git grep -n CRON_SECRET`
