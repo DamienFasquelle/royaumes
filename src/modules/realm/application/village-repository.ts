@@ -21,9 +21,9 @@ export interface VillageRepository {
    * Les messages éventuels sont enregistrés dans la boîte d'envoi, avec les événements.
    */
   save(
-      userId: string,
-      expectedVersion: number,
-      events: VillageEvent[],
-      messages?: NewMessage[],
+    userId: string,
+    expectedVersion: number,
+    events: VillageEvent[],
+    messages?: NewMessage[],
   ): Promise<void>
 }

@@ -56,49 +56,49 @@ export const initialState: VillageState = {
 // ---------------------------------------------------------------------------
 
 export type VillageEvent =
-    | { type: 'VillageFounded'; data: { name: string; at: number } }
-    | {
-  type: 'BuildingUpgraded'
-  data: { building: Building; toLevel: number; cost: Partial<Stock>; at: number }
-}
-    // Mouvements de ressources demandés par un autre module (TD9). Chacun porte l'identifiant
-    // du mouvement, choisi par le demandeur, qui permet d'en reconnaître un doublon.
-    | {
-  type: 'ResourcesWithdrawn'
-  data: { transferId: string; resources: Partial<Stock>; at: number }
-}
-    | {
-  type: 'WithdrawalRefused'
-  data: { transferId: string; missing: Partial<Stock>; at: number }
-}
-    | {
-  type: 'ResourcesDeposited'
-  data: { transferId: string; resources: Partial<Stock>; at: number }
-}
+  | { type: 'VillageFounded'; data: { name: string; at: number } }
+  | {
+      type: 'BuildingUpgraded'
+      data: { building: Building; toLevel: number; cost: Partial<Stock>; at: number }
+    }
+  // Mouvements de ressources demandés par un autre module (TD9). Chacun porte l'identifiant
+  // du mouvement, choisi par le demandeur, qui permet d'en reconnaître un doublon.
+  | {
+      type: 'ResourcesWithdrawn'
+      data: { transferId: string; resources: Partial<Stock>; at: number }
+    }
+  | {
+      type: 'WithdrawalRefused'
+      data: { transferId: string; missing: Partial<Stock>; at: number }
+    }
+  | {
+      type: 'ResourcesDeposited'
+      data: { transferId: string; resources: Partial<Stock>; at: number }
+    }
 
 // ---------------------------------------------------------------------------
 // Commandes : des intentions, nommées à l'impératif
 // ---------------------------------------------------------------------------
 
 export type VillageCommand =
-    | { type: 'FoundVillage'; name: string }
-    | { type: 'UpgradeBuilding'; building: Building }
-    | TransferCommand
+  | { type: 'FoundVillage'; name: string }
+  | { type: 'UpgradeBuilding'; building: Building }
+  | TransferCommand
 
 /** Commandes de mouvement de ressources, émises par un autre module et non par le joueur. */
 export type TransferCommand =
-    | { type: 'WithdrawResources'; transferId: string; resources: Partial<Stock> }
-    | { type: 'DepositResources'; transferId: string; resources: Partial<Stock> }
+  | { type: 'WithdrawResources'; transferId: string; resources: Partial<Stock> }
+  | { type: 'DepositResources'; transferId: string; resources: Partial<Stock> }
 
 // ---------------------------------------------------------------------------
 // Résultat d'une décision : des événements, ou une erreur métier
 // ---------------------------------------------------------------------------
 
 export type DomainError =
-    | { code: 'ALREADY_FOUNDED' }
-    | { code: 'NOT_FOUNDED' }
-    | { code: 'MAX_LEVEL_REACHED'; building: Building }
-    | { code: 'INSUFFICIENT_RESOURCES'; missing: Partial<Stock> }
+  | { code: 'ALREADY_FOUNDED' }
+  | { code: 'NOT_FOUNDED' }
+  | { code: 'MAX_LEVEL_REACHED'; building: Building }
+  | { code: 'INSUFFICIENT_RESOURCES'; missing: Partial<Stock> }
 
 export type Decision = { ok: true; events: VillageEvent[] } | { ok: false; error: DomainError }
 
@@ -167,7 +167,7 @@ export function evolve(state: VillageState, event: VillageEvent): VillageState {
       }
     }
 
-      // Un mouvement est appliqué au stock calculé à l'instant du mouvement, comme un coût.
+    // Un mouvement est appliqué au stock calculé à l'instant du mouvement, comme un coût.
     case 'ResourcesWithdrawn': {
       const current = accrue(state, event.data.at)
       return {
@@ -281,9 +281,9 @@ export function decide(state: VillageState, command: VillageCommand, now: number
       return {
         ok: true,
         events:
-            Object.keys(missing).length > 0
-                ? [{ type: 'WithdrawalRefused', data: { transferId, missing, at: now } }]
-                : [{ type: 'ResourcesWithdrawn', data: { transferId, resources, at: now } }],
+          Object.keys(missing).length > 0
+            ? [{ type: 'WithdrawalRefused', data: { transferId, missing, at: now } }]
+            : [{ type: 'ResourcesWithdrawn', data: { transferId, resources, at: now } }],
       }
     }
 

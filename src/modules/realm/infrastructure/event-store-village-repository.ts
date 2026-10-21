@@ -24,10 +24,10 @@ export function createEventStoreVillageRepository(store: EventStore): VillageRep
       // Les événements du domaine sont transmis au journal sous leur forme générique,
       // avec les messages éventuels, enregistrés dans la même transaction.
       await store.append(
-          villageStream(userId),
-          expectedVersion,
-          events as unknown as NewEvent[],
-          messages,
+        villageStream(userId),
+        expectedVersion,
+        events as unknown as NewEvent[],
+        messages,
       )
     },
   }

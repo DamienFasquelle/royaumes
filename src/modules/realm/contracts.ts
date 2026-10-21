@@ -14,10 +14,10 @@ export { stockAt } from './domain/village'
 /** Corps attendu pour fonder un village. */
 export const FoundVillageInput = z.object({
   name: z
-      .string()
-      .trim()
-      .min(2, 'Le nom doit comporter au moins 2 caractères')
-      .max(30, 'Le nom doit comporter au plus 30 caractères'),
+    .string()
+    .trim()
+    .min(2, 'Le nom doit comporter au moins 2 caractères')
+    .max(30, 'Le nom doit comporter au plus 30 caractères'),
 })
 
 /** Corps attendu pour améliorer un bâtiment : un bâtiment du catalogue. */
@@ -52,9 +52,9 @@ const Amount = z.number().int().positive()
 
 /** Quantités de ressources d'un mouvement : au moins une ressource, aucune autre clé. */
 export const ResourceAmounts = z
-    .object({ wood: Amount.optional(), stone: Amount.optional(), gold: Amount.optional() })
-    .strict()
-    .refine((amounts) => Object.keys(amounts).length > 0, 'Au moins une ressource est attendue')
+  .object({ wood: Amount.optional(), stone: Amount.optional(), gold: Amount.optional() })
+  .strict()
+  .refine((amounts) => Object.keys(amounts).length > 0, 'Au moins une ressource est attendue')
 
 /** Contenu d'un message de prélèvement ou de versement. */
 export const TransferRequest = z.object({
