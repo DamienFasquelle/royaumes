@@ -46,33 +46,33 @@ import { mix, pick, type Random, randomInt, seeded } from './random'
 // ---------------------------------------------------------------------------
 
 export type GameCommand =
-    | { type: 'CreateGame'; playerId: string; name: string; difficulty: Difficulty; seed: number }
-    | { type: 'JoinGame'; playerId: string; name: string }
-    | { type: 'AddCompanion'; playerId: string }
-    | { type: 'StartGame'; playerId: string }
-    | { type: 'OpenDoor'; playerId: string }
-    // round : la manche pour laquelle le joueur a choisi, telle qu'il l'a vue à l'écran.
-    | { type: 'SubmitAction'; playerId: string; round: number; action: Action }
-    // Commande d'échéance : n'a pas d'autre effet que d'enregistrer les manches échues.
-    | { type: 'CheckDeadline' }
+  | { type: 'CreateGame'; playerId: string; name: string; difficulty: Difficulty; seed: number }
+  | { type: 'JoinGame'; playerId: string; name: string }
+  | { type: 'AddCompanion'; playerId: string }
+  | { type: 'StartGame'; playerId: string }
+  | { type: 'OpenDoor'; playerId: string }
+  // round : la manche pour laquelle le joueur a choisi, telle qu'il l'a vue à l'écran.
+  | { type: 'SubmitAction'; playerId: string; round: number; action: Action }
+  // Commande d'échéance : n'a pas d'autre effet que d'enregistrer les manches échues.
+  | { type: 'CheckDeadline' }
 
 // ---------------------------------------------------------------------------
 // Résultat d'une décision : des événements, ou une erreur métier
 // ---------------------------------------------------------------------------
 
 export type GameError =
-    | { code: 'GAME_NOT_FOUND' }
-    | { code: 'ALREADY_EXISTS' }
-    | { code: 'WRONG_PHASE'; phase: Phase }
-    | { code: 'GAME_FULL' }
-    | { code: 'ALREADY_JOINED' }
-    | { code: 'NOT_A_MEMBER' }
-    | { code: 'NOT_HOST' }
-    | { code: 'NOT_YOUR_TURN' }
-    | { code: 'HERO_DOWN' }
-    | { code: 'ROUND_OVER'; round: number }
-    | { code: 'ALREADY_CHOSEN' }
-    | { code: 'INVALID_TARGET' }
+  | { code: 'GAME_NOT_FOUND' }
+  | { code: 'ALREADY_EXISTS' }
+  | { code: 'WRONG_PHASE'; phase: Phase }
+  | { code: 'GAME_FULL' }
+  | { code: 'ALREADY_JOINED' }
+  | { code: 'NOT_A_MEMBER' }
+  | { code: 'NOT_HOST' }
+  | { code: 'NOT_YOUR_TURN' }
+  | { code: 'HERO_DOWN' }
+  | { code: 'ROUND_OVER'; round: number }
+  | { code: 'ALREADY_CHOSEN' }
+  | { code: 'INVALID_TARGET' }
 
 export type Decision = { ok: true; events: GameEvent[] } | { ok: false; error: GameError }
 
@@ -88,9 +88,9 @@ const fail = (error: GameError): Decision => ({ ok: false, error })
  * Les caractéristiques des monstres, bonus du niveau compris, sont enregistrées dans les salles.
  */
 export function generateRooms(
-    seed: number,
-    heroCount: number,
-    difficulty: Difficulty = DEFAULT_DIFFICULTY,
+  seed: number,
+  heroCount: number,
+  difficulty: Difficulty = DEFAULT_DIFFICULTY,
 ): Room[] {
   const random = seeded(mix(seed, 0))
   const spec = (kind: MonsterKind): MonsterSpec => ({
@@ -123,7 +123,7 @@ export function generateRooms(
 
 /** Dégâts infligés par un combattant : son attaque, plus ou moins l'écart autorisé. */
 const rollDamage = (random: Random, attack: number, spread: number) =>
-    Math.max(1, randomInt(random, attack - spread, attack + spread))
+  Math.max(1, randomInt(random, attack - spread, attack + spread))
 
 // ---------------------------------------------------------------------------
 // Résolution d'une manche
@@ -173,8 +173,8 @@ export function resolveRound(state: GameState, at: number): GameEvent[] {
   for (const [heroId, action] of Object.entries(actions)) {
     if (action.type !== 'attack') continue
     const target = isStanding(action.target)
-        ? action.target
-        : monsters.find((monster) => monster.hp > 0)?.id
+      ? action.target
+      : monsters.find((monster) => monster.hp > 0)?.id
     if (!target) break
     const attack = heroes.find((hero) => hero.id === heroId)?.attack ?? 0
     const amount = rollDamage(random, attack, DAMAGE_SPREAD.hero)
@@ -268,7 +268,7 @@ export function decide(state: GameState, command: GameCommand, now: number): Dec
 
 /** Un membre est un joueur qui incarne un héros de l'expédition ; un compagnon n'en est pas un. */
 const isMember = (state: GameState, playerId: string) =>
-    state.heroes.some((hero) => hero.id === playerId && !hero.companion)
+  state.heroes.some((hero) => hero.id === playerId && !hero.companion)
 
 function decideCommand(state: GameState, command: GameCommand, now: number): Decision {
   if (command.type === 'CreateGame') {
@@ -367,7 +367,7 @@ function decideCommand(state: GameState, command: GameCommand, now: number): Dec
       // l'échéance : les compagnons, eux, décident au moment de la résolution.
       const after = evolve(state, submitted)
       const everyoneReady = standingPlayerHeroes(after).every(
-          (h) => after.choices[h.id] !== undefined,
+        (h) => after.choices[h.id] !== undefined,
       )
       return {
         ok: true,
