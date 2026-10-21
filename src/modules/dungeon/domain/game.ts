@@ -13,9 +13,9 @@ export type Phase = 'lobby' | 'exploring' | 'combat' | 'won' | 'lost'
 
 /** Contenu d'une salle, tiré au sort au lancement de l'expédition. */
 export type Room =
-    | { kind: 'empty' }
-    | { kind: 'treasure'; gold: number }
-    | { kind: 'monsters'; monsters: MonsterSpec[] }
+  | { kind: 'empty' }
+  | { kind: 'treasure'; gold: number }
+  | { kind: 'monsters'; monsters: MonsterSpec[] }
 
 /** Caractéristiques d'un monstre, fixées lors du tirage des salles. */
 export interface MonsterSpec {
@@ -52,14 +52,14 @@ export interface Monster {
 
 /** Action choisie par un héros pour une manche de combat. */
 export type Action =
-    | { type: 'attack'; target: string }
-    | { type: 'defend' }
-    | { type: 'heal'; target: string }
+  | { type: 'attack'; target: string }
+  | { type: 'defend' }
+  | { type: 'heal'; target: string }
 
 /** Effet produit par la résolution d'une manche. */
 export type Effect =
-    | { kind: 'damage'; source: string; target: string; amount: number }
-    | { kind: 'heal'; source: string; target: string; amount: number }
+  | { kind: 'damage'; source: string; target: string; amount: number }
+  | { kind: 'heal'; source: string; target: string; amount: number }
 
 // ---------------------------------------------------------------------------
 // État
@@ -119,54 +119,54 @@ export const initialState: GameState = {
 // ---------------------------------------------------------------------------
 
 export type GameEvent =
-    | {
-  type: 'GameCreated'
-  data: {
-    hostId: string
-    hostName: string
-    hero: HeroSpec
-    /** Facultatif : absent des événements enregistrés avant le TD7. */
-    difficulty?: Difficulty
-    seed: number
-    at: number
-  }
-}
-    | { type: 'PlayerJoined'; data: { playerId: string; name: string; hero: HeroSpec; at: number } }
-    | {
-  type: 'CompanionAdded'
-  data: { companionId: string; name: string; hero: HeroSpec; at: number }
-}
-    | {
-  type: 'GameStarted'
-  // deadline : échéance du premier tour d'exploration ; absente avant le TD7.
-  data: { rooms: Room[]; deadline?: number; at: number }
-}
-    | {
-  type: 'RoomEntered'
-  // deadline : échéance de la première manche si la salle abrite des monstres, sinon
-  // échéance du tour d'exploration suivant (null pour les événements antérieurs au TD7).
-  data: { heroId: string; room: number; deadline: number | null; at: number }
-}
-    | { type: 'ActionSubmitted'; data: { heroId: string; round: number; action: Action; at: number } }
-    | {
-  type: 'RoundResolved'
-  data: {
-    round: number
-    /** Actions de tous les héros debout, y compris la défense des héros sans choix. */
-    actions: Record<string, Action>
-    /** Effets tirés au sort lors de la résolution, appliqués tels quels par evolve. */
-    effects: Effect[]
-    /** Échéance de la manche suivante ; null si le combat est terminé. */
-    nextDeadline: number | null
-    /** Échéance du tour d'exploration qui suit un combat gagné ; absente avant le TD7. */
-    exploreDeadline?: number | null
-    at: number
-  }
-}
-    | {
-  type: 'GameEnded'
-  data: { result: 'won' | 'lost'; loot: number; heroIds: string[]; at: number }
-}
+  | {
+      type: 'GameCreated'
+      data: {
+        hostId: string
+        hostName: string
+        hero: HeroSpec
+        /** Facultatif : absent des événements enregistrés avant le TD7. */
+        difficulty?: Difficulty
+        seed: number
+        at: number
+      }
+    }
+  | { type: 'PlayerJoined'; data: { playerId: string; name: string; hero: HeroSpec; at: number } }
+  | {
+      type: 'CompanionAdded'
+      data: { companionId: string; name: string; hero: HeroSpec; at: number }
+    }
+  | {
+      type: 'GameStarted'
+      // deadline : échéance du premier tour d'exploration ; absente avant le TD7.
+      data: { rooms: Room[]; deadline?: number; at: number }
+    }
+  | {
+      type: 'RoomEntered'
+      // deadline : échéance de la première manche si la salle abrite des monstres, sinon
+      // échéance du tour d'exploration suivant (null pour les événements antérieurs au TD7).
+      data: { heroId: string; room: number; deadline: number | null; at: number }
+    }
+  | { type: 'ActionSubmitted'; data: { heroId: string; round: number; action: Action; at: number } }
+  | {
+      type: 'RoundResolved'
+      data: {
+        round: number
+        /** Actions de tous les héros debout, y compris la défense des héros sans choix. */
+        actions: Record<string, Action>
+        /** Effets tirés au sort lors de la résolution, appliqués tels quels par evolve. */
+        effects: Effect[]
+        /** Échéance de la manche suivante ; null si le combat est terminé. */
+        nextDeadline: number | null
+        /** Échéance du tour d'exploration qui suit un combat gagné ; absente avant le TD7. */
+        exploreDeadline?: number | null
+        at: number
+      }
+    }
+  | {
+      type: 'GameEnded'
+      data: { result: 'won' | 'lost'; loot: number; heroIds: string[]; at: number }
+    }
 
 // ---------------------------------------------------------------------------
 // Fonctions utilitaires sur l'état
@@ -177,11 +177,11 @@ export const standingHeroes = (state: GameState) => state.heroes.filter((hero) =
 
 /** Monstres encore debout. */
 export const standingMonsters = (state: GameState) =>
-    state.monsters.filter((monster) => monster.hp > 0)
+  state.monsters.filter((monster) => monster.hp > 0)
 
 /** Héros incarnés par un joueur et encore debout : les compagnons en sont exclus. */
 export const standingPlayerHeroes = (state: GameState) =>
-    state.heroes.filter((hero) => hero.hp > 0 && !hero.companion)
+  state.heroes.filter((hero) => hero.hp > 0 && !hero.companion)
 
 /**
  * Indice du prochain explorateur après l'indice from : un héros debout, incarné par un joueur.
@@ -207,18 +207,18 @@ const newHero = (id: string, name: string, spec: HeroSpec, companion = false): H
 
 /** Crée les monstres d'une salle à partir des caractéristiques enregistrées dans les salles. */
 const spawn = (specs: MonsterSpec[]): Monster[] =>
-    specs.map((spec, index) => ({
-      id: `m${index}`,
-      kind: spec.kind,
-      hp: spec.hp,
-      maxHp: spec.hp,
-      attack: spec.attack,
-    }))
+  specs.map((spec, index) => ({
+    id: `m${index}`,
+    kind: spec.kind,
+    hp: spec.hp,
+    maxHp: spec.hp,
+    attack: spec.attack,
+  }))
 
 /** Applique un effet aux combattants, sans descendre sous 0 ni dépasser le maximum. */
 export function applyEffect<T extends { id: string; hp: number; maxHp: number }>(
-    fighters: T[],
-    effect: Effect,
+  fighters: T[],
+  effect: Effect,
 ): T[] {
   return fighters.map((fighter) => {
     if (fighter.id !== effect.target) return fighter

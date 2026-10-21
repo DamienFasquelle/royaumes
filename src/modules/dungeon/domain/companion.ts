@@ -7,10 +7,10 @@ import type { Action, Hero, Monster } from './game'
 
 /** Situation présentée au compagnon au début de la résolution de la manche. */
 export interface CompanionContext {
-    /** Héros encore debout, le compagnon compris. */
-    heroes: Hero[]
-    /** Monstres encore debout (jamais vide pendant un combat). */
-    monsters: Monster[]
+  /** Héros encore debout, le compagnon compris. */
+  heroes: Hero[]
+  /** Monstres encore debout (jamais vide pendant un combat). */
+  monsters: Monster[]
 }
 
 /** Part des points de vie restants d'un combattant. */
@@ -21,11 +21,11 @@ const healthRatio = (fighter: { hp: number; maxHp: number }) => fighter.hp / fig
  * 2. Sinon, il attaque le monstre qui a le moins de points de vie, pour l'abattre au plus vite.
  */
 export function chooseCompanionAction({ heroes, monsters }: CompanionContext): Action {
-    const endangered = heroes.filter((hero) => healthRatio(hero) < COMPANION_HEAL_RATIO)
-    if (endangered.length > 0) {
-        const mostWounded = endangered.reduce((a, b) => (healthRatio(b) < healthRatio(a) ? b : a))
-        return { type: 'heal', target: mostWounded.id }
-    }
-    const weakest = monsters.reduce((a, b) => (b.hp < a.hp ? b : a))
-    return { type: 'attack', target: weakest.id }
+  const endangered = heroes.filter((hero) => healthRatio(hero) < COMPANION_HEAL_RATIO)
+  if (endangered.length > 0) {
+    const mostWounded = endangered.reduce((a, b) => (healthRatio(b) < healthRatio(a) ? b : a))
+    return { type: 'heal', target: mostWounded.id }
+  }
+  const weakest = monsters.reduce((a, b) => (b.hp < a.hp ? b : a))
+  return { type: 'attack', target: weakest.id }
 }

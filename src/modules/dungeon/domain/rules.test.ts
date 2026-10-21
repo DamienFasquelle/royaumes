@@ -71,9 +71,9 @@ describe('Donjon - salon', () => {
 
   it("refuse qu'un joueur rejoigne deux fois la même expédition", () => {
     const decision = decide(
-        replay([created, bobJoined]),
-        { type: 'JoinGame', playerId: 'bob', name: 'Bob' },
-        T0,
+      replay([created, bobJoined]),
+      { type: 'JoinGame', playerId: 'bob', name: 'Bob' },
+      T0,
     )
     expect(decision).toEqual({ ok: false, error: { code: 'ALREADY_JOINED' } })
   })
@@ -196,9 +196,9 @@ describe('Donjon - combat', () => {
     const state = inCombat()
     // Bob choisit pour la manche 1 alors que son échéance est passée : la manche 2 a commencé.
     const decision = decide(
-        state,
-        { type: 'SubmitAction', playerId: 'bob', round: 1, action: { type: 'defend' } },
-        T0 + ROUND_MS + 1,
+      state,
+      { type: 'SubmitAction', playerId: 'bob', round: 1, action: { type: 'defend' } },
+      T0 + ROUND_MS + 1,
     )
     expect(decision).toEqual({ ok: false, error: { code: 'ROUND_OVER', round: 2 } })
   })
