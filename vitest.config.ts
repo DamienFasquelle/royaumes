@@ -14,7 +14,9 @@ export default defineConfig({
     // dépendent ainsi d'aucune variable de l'environnement de production.
     env: { NODE_ENV: 'test' },
     // Chaque fichier de test de l'API démarre sa propre base PGlite : sur un poste chargé,
-    // ce démarrage peut dépasser le délai par défaut de cinq secondes.
+    // ce démarrage peut dépasser le délai par défaut de cinq secondes. Il a lieu dans le
+    // premier beforeEach du fichier : le délai des hooks est donc allongé lui aussi.
     testTimeout: 20_000,
+    hookTimeout: 20_000,
   },
 })

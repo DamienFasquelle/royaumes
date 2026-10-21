@@ -61,7 +61,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 /** Convertit une ligne de la table en événement enregistré. */
-function toStored(row: typeof events.$inferSelect): StoredEvent {
+export function toStored(row: typeof events.$inferSelect): StoredEvent {
   return {
     position: row.position,
     stream: row.stream,
