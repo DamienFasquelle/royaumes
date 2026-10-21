@@ -13,9 +13,9 @@ export type Phase = 'lobby' | 'exploring' | 'combat' | 'won' | 'lost'
 
 /** Contenu d'une salle, tiré au sort au lancement de l'expédition. */
 export type Room =
-  | { kind: 'empty' }
-  | { kind: 'treasure'; gold: number }
-  | { kind: 'monsters'; monsters: MonsterSpec[] }
+    | { kind: 'empty' }
+    | { kind: 'treasure'; gold: number }
+    | { kind: 'monsters'; monsters: MonsterSpec[] }
 
 /** Caractéristiques d'un monstre, fixées lors du tirage des salles. */
 export interface MonsterSpec {
@@ -25,12 +25,14 @@ export interface MonsterSpec {
 }
 
 export interface Hero {
-  /** Identifiant du joueur qui incarne le héros. */
+  /** Identifiant du joueur qui incarne le héros, ou du compagnon (« companion-1 »...). */
   id: string
   name: string
   hp: number
   maxHp: number
   attack: number
+  /** Vrai pour un compagnon : aucun joueur ne l'incarne, l'intelligence artificielle décide. */
+  companion: boolean
 }
 
 /** Caractéristiques de départ d'un héros, enregistrées lorsqu'il rejoint l'expédition. */
@@ -50,14 +52,14 @@ export interface Monster {
 
 /** Action choisie par un héros pour une manche de combat. */
 export type Action =
-  | { type: 'attack'; target: string }
-  | { type: 'defend' }
-  | { type: 'heal'; target: string }
+    | { type: 'attack'; target: string }
+    | { type: 'defend' }
+    | { type: 'heal'; target: string }
 
 /** Effet produit par la résolution d'une manche. */
 export type Effect =
-  | { kind: 'damage'; source: string; target: string; amount: number }
-  | { kind: 'heal'; source: string; target: string; amount: number }
+    | { kind: 'damage'; source: string; target: string; amount: number }
+    | { kind: 'heal'; source: string; target: string; amount: number }
 
 // ---------------------------------------------------------------------------
 // État
@@ -117,43 +119,54 @@ export const initialState: GameState = {
 // ---------------------------------------------------------------------------
 
 export type GameEvent =
-  | {
-      type: 'GameCreated'
-      data: {
-        hostId: string
-        hostName: string
-        hero: HeroSpec
-        /** Facultatif : absent des événements enregistrés avant le TD7. */
-        difficulty?: Difficulty
-        seed: number
-        at: number
-      }
-    }
-  | { type: 'PlayerJoined'; data: { playerId: string; name: string; hero: HeroSpec; at: number } }
-  | { type: 'GameStarted'; data: { rooms: Room[]; at: number } }
-  | {
-      type: 'RoomEntered'
-      // deadline : échéance de la première manche si la salle abrite des monstres, sinon null.
-      data: { heroId: string; room: number; deadline: number | null; at: number }
-    }
-  | { type: 'ActionSubmitted'; data: { heroId: string; round: number; action: Action; at: number } }
-  | {
-      type: 'RoundResolved'
-      data: {
-        round: number
-        /** Actions de tous les héros debout, y compris la défense des héros sans choix. */
-        actions: Record<string, Action>
-        /** Effets tirés au sort lors de la résolution, appliqués tels quels par evolve. */
-        effects: Effect[]
-        /** Échéance de la manche suivante ; null si le combat est terminé. */
-        nextDeadline: number | null
-        at: number
-      }
-    }
-  | {
-      type: 'GameEnded'
-      data: { result: 'won' | 'lost'; loot: number; heroIds: string[]; at: number }
-    }
+    | {
+  type: 'GameCreated'
+  data: {
+    hostId: string
+    hostName: string
+    hero: HeroSpec
+    /** Facultatif : absent des événements enregistrés avant le TD7. */
+    difficulty?: Difficulty
+    seed: number
+    at: number
+  }
+}
+    | { type: 'PlayerJoined'; data: { playerId: string; name: string; hero: HeroSpec; at: number } }
+    | {
+  type: 'CompanionAdded'
+  data: { companionId: string; name: string; hero: HeroSpec; at: number }
+}
+    | {
+  type: 'GameStarted'
+  // deadline : échéance du premier tour d'exploration ; absente avant le TD7.
+  data: { rooms: Room[]; deadline?: number; at: number }
+}
+    | {
+  type: 'RoomEntered'
+  // deadline : échéance de la première manche si la salle abrite des monstres, sinon
+  // échéance du tour d'exploration suivant (null pour les événements antérieurs au TD7).
+  data: { heroId: string; room: number; deadline: number | null; at: number }
+}
+    | { type: 'ActionSubmitted'; data: { heroId: string; round: number; action: Action; at: number } }
+    | {
+  type: 'RoundResolved'
+  data: {
+    round: number
+    /** Actions de tous les héros debout, y compris la défense des héros sans choix. */
+    actions: Record<string, Action>
+    /** Effets tirés au sort lors de la résolution, appliqués tels quels par evolve. */
+    effects: Effect[]
+    /** Échéance de la manche suivante ; null si le combat est terminé. */
+    nextDeadline: number | null
+    /** Échéance du tour d'exploration qui suit un combat gagné ; absente avant le TD7. */
+    exploreDeadline?: number | null
+    at: number
+  }
+}
+    | {
+  type: 'GameEnded'
+  data: { result: 'won' | 'lost'; loot: number; heroIds: string[]; at: number }
+}
 
 // ---------------------------------------------------------------------------
 // Fonctions utilitaires sur l'état
@@ -164,40 +177,48 @@ export const standingHeroes = (state: GameState) => state.heroes.filter((hero) =
 
 /** Monstres encore debout. */
 export const standingMonsters = (state: GameState) =>
-  state.monsters.filter((monster) => monster.hp > 0)
+    state.monsters.filter((monster) => monster.hp > 0)
 
-/** Indice du prochain héros debout après l'indice from, en revenant au début si nécessaire. */
-export function nextStandingHero(heroes: Hero[], from: number): number {
+/** Héros incarnés par un joueur et encore debout : les compagnons en sont exclus. */
+export const standingPlayerHeroes = (state: GameState) =>
+    state.heroes.filter((hero) => hero.hp > 0 && !hero.companion)
+
+/**
+ * Indice du prochain explorateur après l'indice from : un héros debout, incarné par un joueur.
+ * Les compagnons ne prennent jamais de tour d'exploration.
+ */
+export function nextExplorer(heroes: Hero[], from: number): number {
   for (let step = 1; step <= heroes.length; step++) {
     const index = (from + step) % heroes.length
-    if (heroes[index].hp > 0) return index
+    if (heroes[index].hp > 0 && !heroes[index].companion) return index
   }
   return from
 }
 
 /** Crée un héros à partir des caractéristiques enregistrées dans l'événement. */
-const newHero = (id: string, name: string, spec: HeroSpec): Hero => ({
+const newHero = (id: string, name: string, spec: HeroSpec, companion = false): Hero => ({
   id,
   name,
   hp: spec.hp,
   maxHp: spec.hp,
   attack: spec.attack,
+  companion,
 })
 
 /** Crée les monstres d'une salle à partir des caractéristiques enregistrées dans les salles. */
 const spawn = (specs: MonsterSpec[]): Monster[] =>
-  specs.map((spec, index) => ({
-    id: `m${index}`,
-    kind: spec.kind,
-    hp: spec.hp,
-    maxHp: spec.hp,
-    attack: spec.attack,
-  }))
+    specs.map((spec, index) => ({
+      id: `m${index}`,
+      kind: spec.kind,
+      hp: spec.hp,
+      maxHp: spec.hp,
+      attack: spec.attack,
+    }))
 
 /** Applique un effet aux combattants, sans descendre sous 0 ni dépasser le maximum. */
 export function applyEffect<T extends { id: string; hp: number; maxHp: number }>(
-  fighters: T[],
-  effect: Effect,
+    fighters: T[],
+    effect: Effect,
 ): T[] {
   return fighters.map((fighter) => {
     if (fighter.id !== effect.target) return fighter
@@ -230,14 +251,28 @@ export function evolve(state: GameState, event: GameEvent): GameState {
         heroes: [...state.heroes, newHero(event.data.playerId, event.data.name, event.data.hero)],
       }
 
+    case 'CompanionAdded': {
+      const { companionId, name, hero } = event.data
+      return { ...state, heroes: [...state.heroes, newHero(companionId, name, hero, true)] }
+    }
+
     case 'GameStarted':
-      return { ...state, phase: 'exploring', rooms: event.data.rooms, turn: 0 }
+      // L'hôte, premier héros de la liste, ouvre la première porte.
+      return {
+        ...state,
+        phase: 'exploring',
+        rooms: event.data.rooms,
+        turn: 0,
+        // Upcasting : une expédition lancée avant le TD7 n'a pas d'échéance d'exploration.
+        deadline: event.data.deadline ?? null,
+      }
 
     case 'RoomEntered': {
       const room = state.rooms[event.data.room]
-      const turn = nextStandingHero(state.heroes, state.turn)
+      const turn = nextExplorer(state.heroes, state.turn)
+      const deadline = event.data.deadline
       if (room.kind === 'treasure') {
-        return { ...state, room: event.data.room, turn, loot: state.loot + room.gold }
+        return { ...state, room: event.data.room, turn, deadline, loot: state.loot + room.gold }
       }
       if (room.kind === 'monsters') {
         // La salle déclenche un combat : la première manche commence aussitôt.
@@ -248,12 +283,12 @@ export function evolve(state: GameState, event: GameEvent): GameState {
           phase: 'combat',
           monsters: spawn(room.monsters),
           round: state.round + 1,
-          deadline: event.data.deadline,
+          deadline,
           choices: {},
           lastRound: null,
         }
       }
-      return { ...state, room: event.data.room, turn }
+      return { ...state, room: event.data.room, turn, deadline }
     }
 
     case 'ActionSubmitted':
@@ -282,9 +317,11 @@ export function evolve(state: GameState, event: GameEvent): GameState {
         // Combat terminé : retour à l'exploration (GameEnded suit si l'expédition s'achève).
         phase: combatOver ? 'exploring' : 'combat',
         round: combatOver ? state.round : state.round + 1,
-        deadline: event.data.nextDeadline,
+        // Après un combat gagné, l'échéance est celle du tour d'exploration suivant
+        // (upcasting : absente des événements antérieurs au TD7).
+        deadline: combatOver ? (event.data.exploreDeadline ?? null) : event.data.nextDeadline,
         // Le tour d'exploration ne doit jamais désigner un héros tombé au combat.
-        turn: heroes[state.turn]?.hp > 0 ? state.turn : nextStandingHero(heroes, state.turn),
+        turn: heroes[state.turn]?.hp > 0 ? state.turn : nextExplorer(heroes, state.turn),
       }
     }
 
