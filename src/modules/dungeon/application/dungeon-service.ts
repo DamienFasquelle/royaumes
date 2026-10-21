@@ -3,6 +3,7 @@ import { DEFAULT_DIFFICULTY, type Difficulty, MAX_HEROES } from '../domain/conte
 import { decide, type GameCommand, type GameError } from '../domain/rules'
 import { type GameView, toView } from '../domain/view'
 import type { GameRepository } from './game-repository'
+import type { OpenGamesReader } from './open-games-reader'
 
 /** Résultat d'une commande : la vue mise à jour pour le joueur, ou l'erreur métier. */
 export type CommandResult = { ok: true; view: GameView } | { ok: false; error: GameError }
@@ -23,14 +24,19 @@ export interface DungeonServiceOptions {
   newSeed?: () => number
 }
 
-/** Service applicatif du Donjon : orchestre le domaine et la persistance. */
+/**
+ * Service applicatif du Donjon : orchestre le domaine et la persistance.
+ * Les commandes passent par le modèle d'écriture (repo), la liste des expéditions ouvertes
+ * par un modèle de lecture (openGames).
+ */
 export function createDungeonService(
-  repo: GameRepository,
-  {
-    clock = () => Date.now(),
-    newId = () => crypto.randomUUID(),
-    newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0],
-  }: DungeonServiceOptions = {},
+    repo: GameRepository,
+    openGames: OpenGamesReader,
+    {
+      clock = () => Date.now(),
+      newId = () => crypto.randomUUID(),
+      newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0],
+    }: DungeonServiceOptions = {},
 ) {
   /**
    * Traite une commande sur une expédition : charger, décider, enregistrer,
@@ -53,8 +59,8 @@ export function createDungeonService(
 
   /** Ouvre une nouvelle expédition, dont le joueur devient l'hôte, au niveau de difficulté choisi. */
   async function create(
-    player: { id: string; name: string },
-    difficulty: Difficulty = DEFAULT_DIFFICULTY,
+      player: { id: string; name: string },
+      difficulty: Difficulty = DEFAULT_DIFFICULTY,
   ) {
     const gameId = newId()
     const result = await execute(gameId, player.id, {
@@ -75,7 +81,7 @@ export function createDungeonService(
 
   /** Expéditions qui peuvent encore être rejointes. */
   function listOpenGames() {
-    return repo.listOpenGames(clock())
+    return openGames.list(clock())
   }
 
   return { execute, create, getView, listOpenGames }
