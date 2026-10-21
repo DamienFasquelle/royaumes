@@ -49,6 +49,9 @@ export function createApi({ auth, db, store, ready, clock, realtime, cronSecret 
   const dungeon = createDungeonModule({ store, db, projections, clock })
   const ranking = createRankingModule({ db, projections })
 
+  // Gestionnaires de messages, déclarés par les modules et confiés au distributeur.
+  dispatcher.register(realm.handlers)
+
   // Règles d'accès aux canaux temps réel, déclarées par les modules.
   const policies: ChannelPolicy[] = [
     realm.channelPolicy,
@@ -94,11 +97,11 @@ export function createApi({ auth, db, store, ready, clock, realtime, cronSecret 
   // 7. Montage des sous-applications : chaque module reçoit son propre préfixe.
   //    Les appels sont chaînés afin que TypeScript conserve le type de chaque route.
   return app
-    .route('/system', system.api)
-    .route('/realm', realm.api)
-    .route('/dungeon', dungeon.api)
-    .route('/ranking', ranking.api)
-    .route('/stream', createRealtimeApi({ store, policies, ...realtime }))
+      .route('/system', system.api)
+      .route('/realm', realm.api)
+      .route('/dungeon', dungeon.api)
+      .route('/ranking', ranking.api)
+      .route('/stream', createRealtimeApi({ store, policies, ...realtime }))
 }
 
 /** Type de l'application complète, déduit de ses routes. */
