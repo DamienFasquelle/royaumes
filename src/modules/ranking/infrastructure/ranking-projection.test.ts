@@ -35,7 +35,7 @@ const ended = (result: 'won' | 'lost', loot: number, heroIds: string[]): NewEven
 
 /** Ligne du classement d'un joueur. */
 const entryOf = async (playerId: string) =>
-  (await reader.top(20)).find((entry) => entry.playerId === playerId)
+    (await reader.top(20)).find((entry) => entry.playerId === playerId)
 
 describe('Projection du classement', () => {
   it("attribue le résultat d'une expédition gagnée à ses joueurs, sans les compagnons", async () => {
@@ -68,6 +68,14 @@ describe('Projection du classement', () => {
       { type: 'BuildingUpgraded', data: {} },
     ])
     expect(await entryOf('carol')).toMatchObject({ label: 'Seigneur de Valombre', upgrades: 2 })
+  })
+
+  it('retient le meilleur butin des expéditions gagnées', async () => {
+    await store.append('dungeon-g1', 0, [created('alice'), ended('won', 25, ['alice'])])
+    await store.append('dungeon-g2', 0, [created('alice'), ended('won', 40, ['alice'])])
+    await store.append('dungeon-g3', 0, [created('alice'), ended('won', 10, ['alice'])])
+    await store.append('dungeon-g4', 0, [created('alice'), ended('lost', 90, ['alice'])])
+    expect(await entryOf('alice')).toMatchObject({ gamesWon: 3, gold: 75, bestLoot: 40 })
   })
 
   it('range les joueurs par victoires, puis par or', async () => {

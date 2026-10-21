@@ -7,7 +7,7 @@ import { players } from './schema'
 
 /** Nom affiché d'un joueur : son nom s'il est connu, sinon celui de son village. */
 const labelOf = (row: typeof players.$inferSelect) =>
-  row.name ?? (row.village ? `Seigneur de ${row.village}` : 'Joueur inconnu')
+    row.name ?? (row.village ? `Seigneur de ${row.village}` : 'Joueur inconnu')
 
 /** Adaptateur du port RankingReader, fondé sur la table du classement. */
 export function createDrizzleRankingReader(db: Db, projections: ProjectionRunner): RankingReader {
@@ -17,15 +17,15 @@ export function createDrizzleRankingReader(db: Db, projections: ProjectionRunner
       await projections.catchUp(rankingProjection)
 
       const rows = await db
-        .select()
-        .from(players)
-        .orderBy(
-          desc(players.gamesWon),
-          desc(players.gold),
-          desc(players.upgrades),
-          asc(players.playerId),
-        )
-        .limit(limit)
+          .select()
+          .from(players)
+          .orderBy(
+              desc(players.gamesWon),
+              desc(players.gold),
+              desc(players.upgrades),
+              asc(players.playerId),
+          )
+          .limit(limit)
 
       return rows.map((row, index) => ({
         rank: index + 1,
@@ -35,6 +35,7 @@ export function createDrizzleRankingReader(db: Db, projections: ProjectionRunner
         gamesWon: row.gamesWon,
         gold: row.gold,
         upgrades: row.upgrades,
+        bestLoot: row.bestLoot,
       }))
     },
   }
