@@ -1,4 +1,4 @@
-import { asc, eq, gt } from 'drizzle-orm'
+import { asc, eq, gt, max, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type { StoredEvent } from '../event-store/event-store'
 import { events } from '../event-store/schema'
@@ -125,25 +125,18 @@ export function createProjectionRunner(
   }
 
   /**
-   * Vérifie, par une simple lecture, que la projection n'a rien à faire : son point de reprise
-   * existe, sa version n'est pas plus ancienne, et aucun événement ne le suit. La consultation
-   * courante n'ouvre alors ni verrou ni transaction d'écriture. En cas de doute, le rattrapage
-   * complet, sous verrou, tranche.
+   * Indique si la projection est à jour : ses tables ont été construites par la version
+   * du code, et son point de reprise a atteint la dernière position du journal.
+   * Deux lectures simples, sans transaction, sans verrou et sans écriture (TD11).
    */
-  async function upToDate(projection: Projection) {
+  async function isUpToDate(projection: Projection): Promise<boolean> {
     const [checkpoint] = await db
-      .select()
+      .select({ position: projections.position, version: projections.version })
       .from(projections)
       .where(eq(projections.name, projection.name))
-    if (!checkpoint) return false
-    if (checkpoint.version > projection.version) return true
-    if (checkpoint.version < projection.version) return false
-    const [next] = await db
-      .select({ position: events.position })
-      .from(events)
-      .where(gt(events.position, checkpoint.position))
-      .limit(1)
-    return !next
+    if (!checkpoint || checkpoint.version !== projection.version) return false
+    const [last] = await db.select({ position: max(events.position) }).from(events)
+    return checkpoint.position >= Number(last?.position ?? 0)
   }
 
   /**
@@ -153,7 +146,11 @@ export function createProjectionRunner(
    * Si la version de la projection a changé, ses tables sont d'abord reconstruites.
    */
   async function catchUp(projection: Projection): Promise<number> {
-    if (await upToDate(projection)) return 0
+    // Chemin rapide : une projection à jour n'a rien à appliquer. Le cas est de loin le plus
+    // fréquent, puisque le journal change bien moins souvent qu'il n'est consulté ; il évite
+    // la transaction, le verrou du point de reprise et l'écriture de sa date de mise à jour.
+    if (await isUpToDate(projection)) return 0
+
     return db.transaction(async (tx) => {
       const checkpoint = await lock(tx, projection)
 
@@ -190,7 +187,24 @@ export function createProjectionRunner(
     return row?.position ?? 0
   }
 
-  return { catchUp, rebuild, positionOf }
+  /**
+   * Enregistre un point de reprise, pour un consommateur qui ne lit pas le journal local :
+   * le relais du flux d'un service extrait, par exemple (TD11). La position ne recule jamais.
+   */
+  async function savePosition(name: string, position: number) {
+    await db
+      .insert(projections)
+      .values({ name, position })
+      .onConflictDoUpdate({
+        target: projections.name,
+        set: {
+          position: sql`greatest(${projections.position}, ${position})`,
+          updatedAt: new Date(),
+        },
+      })
+  }
+
+  return { catchUp, rebuild, positionOf, savePosition }
 }
 
 /** Type du moteur des projections, déduit de sa fabrique. */
