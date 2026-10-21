@@ -80,72 +80,72 @@ async function startFrom(given: string | undefined, source: IdentifiedSource) {
  * instance de l'application peut donc servir n'importe quel joueur.
  */
 export function createRealtimeApi({
-                                    store,
-                                    policies,
-                                    pollMs = 500,
-                                    maxStreamMs = 240_000,
-                                    retryMs = 1_000,
-                                    pingMs = 15_000,
-                                  }: RealtimeOptions) {
+  store,
+  policies,
+  pollMs = 500,
+  maxStreamMs = 240_000,
+  retryMs = 1_000,
+  pingMs = 15_000,
+}: RealtimeOptions) {
   return (
-      new Hono<AppEnv>()
-          // Flux SSE d'un canal.
-          .get('/:channel', async (c) => {
-            const channel = c.req.param('channel')
-            const policy = await authorize(policies, channel, c.var.userId)
-            if (!policy) return c.json(FORBIDDEN, 403)
-            const source = sourceOf(store, channel, policy)
+    new Hono<AppEnv>()
+      // Flux SSE d'un canal.
+      .get('/:channel', async (c) => {
+        const channel = c.req.param('channel')
+        const policy = await authorize(policies, channel, c.var.userId)
+        if (!policy) return c.json(FORBIDDEN, 403)
+        const source = sourceOf(store, channel, policy)
 
-            // Point de reprise : l'en-tête Last-Event-ID, envoyé par le navigateur à la reconnexion,
-            // ou à défaut le paramètre after ; sinon, l'identifiant de départ du canal.
-            let lastId = await startFrom(c.req.header('last-event-id') ?? c.req.query('after'), source)
+        // Point de reprise : l'en-tête Last-Event-ID, envoyé par le navigateur à la reconnexion,
+        // ou à défaut le paramètre after ; sinon, l'identifiant de départ du canal.
+        let lastId = await startFrom(c.req.header('last-event-id') ?? c.req.query('after'), source)
 
-            return streamSSE(c, async (stream) => {
-              let aborted = false
-              stream.onAbort(() => {
-                aborted = true
+        return streamSSE(c, async (stream) => {
+          let aborted = false
+          stream.onAbort(() => {
+            aborted = true
+          })
+          const deadline = Date.now() + maxStreamMs
+          let lastWrite = Date.now()
+
+          // Premier message : le flux est ouvert, et le délai de reconnexion est communiqué.
+          await stream.writeSSE({ event: 'ready', data: String(lastId), retry: retryMs })
+
+          // Tant que le navigateur est connecté et que la durée maximale n'est pas atteinte,
+          // le journal est relu et chaque nouvel événement est transmis.
+          while (!aborted && Date.now() < deadline) {
+            const fresh = await source.read(lastId)
+            for (const event of fresh) {
+              // L'identifiant SSE de l'événement est celui que le navigateur renverra
+              // dans Last-Event-ID après une interruption.
+              lastId = source.idOf(event)
+              await stream.writeSSE({
+                id: String(lastId),
+                event: 'domain-event',
+                data: JSON.stringify(present(event, policy)),
               })
-              const deadline = Date.now() + maxStreamMs
-              let lastWrite = Date.now()
+              lastWrite = Date.now()
+            }
+            // Signe de vie : un commentaire SSE, ignoré par le navigateur, qui empêche
+            // les intermédiaires du réseau de fermer une connexion jugée inactive.
+            if (Date.now() - lastWrite > pingMs) {
+              await stream.write(': ping\n\n')
+              lastWrite = Date.now()
+            }
+            await stream.sleep(pollMs)
+          }
+          // À la sortie de la boucle, la réponse se termine : le navigateur se reconnectera.
+        })
+      })
 
-              // Premier message : le flux est ouvert, et le délai de reconnexion est communiqué.
-              await stream.writeSSE({ event: 'ready', data: String(lastId), retry: retryMs })
-
-              // Tant que le navigateur est connecté et que la durée maximale n'est pas atteinte,
-              // le journal est relu et chaque nouvel événement est transmis.
-              while (!aborted && Date.now() < deadline) {
-                const fresh = await source.read(lastId)
-                for (const event of fresh) {
-                  // L'identifiant SSE de l'événement est celui que le navigateur renverra
-                  // dans Last-Event-ID après une interruption.
-                  lastId = source.idOf(event)
-                  await stream.writeSSE({
-                    id: String(lastId),
-                    event: 'domain-event',
-                    data: JSON.stringify(present(event, policy)),
-                  })
-                  lastWrite = Date.now()
-                }
-                // Signe de vie : un commentaire SSE, ignoré par le navigateur, qui empêche
-                // les intermédiaires du réseau de fermer une connexion jugée inactive.
-                if (Date.now() - lastWrite > pingMs) {
-                  await stream.write(': ping\n\n')
-                  lastWrite = Date.now()
-                }
-                await stream.sleep(pollMs)
-              }
-              // À la sortie de la boucle, la réponse se termine : le navigateur se reconnectera.
-            })
-          })
-
-          // Repli sans diffusion progressive : les événements du canal postérieurs à after.
-          .get('/:channel/events', async (c) => {
-            const channel = c.req.param('channel')
-            const policy = await authorize(policies, channel, c.var.userId)
-            if (!policy) return c.json(FORBIDDEN, 403)
-            const source = sourceOf(store, channel, policy)
-            const events = await source.read(await startFrom(c.req.query('after'), source))
-            return c.json({ events: events.map((event) => present(event, policy)) })
-          })
+      // Repli sans diffusion progressive : les événements du canal postérieurs à after.
+      .get('/:channel/events', async (c) => {
+        const channel = c.req.param('channel')
+        const policy = await authorize(policies, channel, c.var.userId)
+        if (!policy) return c.json(FORBIDDEN, 403)
+        const source = sourceOf(store, channel, policy)
+        const events = await source.read(await startFrom(c.req.query('after'), source))
+        return c.json({ events: events.map((event) => present(event, policy)) })
+      })
   )
 }

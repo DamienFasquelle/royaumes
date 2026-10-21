@@ -11,9 +11,10 @@ export const NAV = [
   { href: '/dungeon', kind: 'dungeon', label: 'Donjon' },
   { href: '/ranking', kind: 'ranking', label: 'Classement' },
   { href: '/market', kind: 'market', label: 'Marché' },
+  { href: '/tavern', kind: 'tavern', label: 'Taverne' },
 ]
 
-/** Cadre de l'espace de jeu : navigation, nom du joueur et déconnexion. */
+/** Cadre de l'espace de jeu : navigation, nom du joueur, accès à ses données et déconnexion. */
 export function AppShell({ userName, children }: { userName: string; children: ReactNode }) {
   const pathname = usePathname()
 
@@ -39,6 +40,9 @@ export function AppShell({ userName, children }: { userName: string; children: R
         <span className="muted" style={{ marginLeft: 'auto' }}>
           {userName}
         </span>
+        <Link href="/account" aria-current={pathname === '/account' ? 'page' : undefined}>
+          Mes données
+        </Link>
         <button className="link" type="button" onClick={signOut}>
           Déconnexion
         </button>

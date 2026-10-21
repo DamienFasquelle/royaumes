@@ -8,19 +8,29 @@ export const tavern = pgSchema('tavern')
 
 /** Messages du salon, supprimés à l'expiration de leur durée de conservation. */
 export const messages = tavern.table(
-    'messages',
-    {
-        id: bigserial('id', { mode: 'number' }).primaryKey(),
-        authorId: text('author_id').notNull(),
-        /** Nom de l'auteur au moment de la publication ; effacé avec les messages de l'auteur. */
-        authorName: text('author_name').notNull(),
-        body: text('body').notNull(),
-        postedAt: bigint('posted_at', { mode: 'number' }).notNull(),
-    },
-    (t) => [
-        // La limitation compte les messages récents d'un auteur ; l'effacement les supprime tous.
-        index('messages_author_idx').on(t.authorId, t.postedAt),
-        // La durée de conservation supprime les messages les plus anciens.
-        index('messages_posted_at_idx').on(t.postedAt),
-    ],
+  'messages',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    authorId: text('author_id').notNull(),
+    /** Nom de l'auteur au moment de la publication ; effacé avec les messages de l'auteur. */
+    authorName: text('author_name').notNull(),
+    body: text('body').notNull(),
+    postedAt: bigint('posted_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    // La limitation compte les messages récents d'un auteur ; l'effacement les supprime tous.
+    index('messages_author_idx').on(t.authorId, t.postedAt),
+    // La durée de conservation supprime les messages les plus anciens.
+    index('messages_posted_at_idx').on(t.postedAt),
+  ],
 )
+
+/**
+ * Joueurs présents : une ligne par joueur, mise à jour à chaque signal de présence, et
+ * supprimée lorsque le joueur est parti. Aucun historique des visites n'est conservé.
+ */
+export const presence = tavern.table('presence', {
+  playerId: text('player_id').primaryKey(),
+  playerName: text('player_name').notNull(),
+  lastSeen: bigint('last_seen', { mode: 'number' }).notNull(),
+})

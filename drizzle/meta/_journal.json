@@ -71,6 +71,20 @@
       "when": 1792582686995,
       "tag": "0009_taverne",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792583930823,
+      "tag": "0010_presence",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792584355302,
+      "tag": "0011_registre_effacements",
+      "breakpoints": true
     }
   ]
 }

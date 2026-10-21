@@ -45,9 +45,9 @@ export interface ChannelPolicy {
  * Un canal qu'aucune règle ne couvre est refusé : l'accès est fermé par défaut.
  */
 export async function authorize(
-    policies: ChannelPolicy[],
-    channel: string,
-    userId: string,
+  policies: ChannelPolicy[],
+  channel: string,
+  userId: string,
 ): Promise<ChannelPolicy | null> {
   const policy = policies.find((p) => channel.startsWith(p.prefix))
   if (!policy) return null

@@ -7,29 +7,35 @@
 /** Longueur maximale d'un message, en caractères. */
 export const MESSAGE_MAX_LENGTH = 280
 
+/** Durée de conservation d'un message : trente jours, en millisecondes. */
+export const RETENTION_MS = 30 * 24 * 60 * 60_000
+
+/** Instant avant lequel un message a dépassé sa durée de conservation. */
+export const expiredBefore = (now: number) => now - RETENTION_MS
+
 /** Nombre maximal de messages d'un même joueur pendant la fenêtre de limitation. */
 export const RATE_LIMIT = { messages: 5, windowMs: 30_000 }
 
 export type MessageError =
-    | { code: 'EMPTY_MESSAGE' }
-    | { code: 'MESSAGE_TOO_LONG'; max: number }
-    | { code: 'TOO_MANY_MESSAGES'; retryAfterMs: number }
+  | { code: 'EMPTY_MESSAGE' }
+  | { code: 'MESSAGE_TOO_LONG'; max: number }
+  | { code: 'TOO_MANY_MESSAGES'; retryAfterMs: number }
 
 /**
  * Vérifie le texte d'un message et le normalise : les espaces de début et de fin sont
  * retirés. Renvoie le texte normalisé, ou l'erreur.
  */
 export function checkBody(
-    body: string,
+  body: string,
 ): { ok: true; body: string } | { ok: false; error: MessageError } {
-    const trimmed = body.trim()
-    if (trimmed.length === 0) return { ok: false, error: { code: 'EMPTY_MESSAGE' } }
-    // La longueur est comptée en caractères, et non en unités UTF-16 : un symbole
-    // comme « 🍺 » compte pour un seul caractère.
-    if ([...trimmed].length > MESSAGE_MAX_LENGTH) {
-        return { ok: false, error: { code: 'MESSAGE_TOO_LONG', max: MESSAGE_MAX_LENGTH } }
-    }
-    return { ok: true, body: trimmed }
+  const trimmed = body.trim()
+  if (trimmed.length === 0) return { ok: false, error: { code: 'EMPTY_MESSAGE' } }
+  // La longueur est comptée en caractères, et non en unités UTF-16 : un symbole
+  // comme « 🍺 » compte pour un seul caractère.
+  if ([...trimmed].length > MESSAGE_MAX_LENGTH) {
+    return { ok: false, error: { code: 'MESSAGE_TOO_LONG', max: MESSAGE_MAX_LENGTH } }
+  }
+  return { ok: true, body: trimmed }
 }
 
 /**
@@ -38,8 +44,8 @@ export function checkBody(
  * sinon l'erreur, avec le délai à attendre.
  */
 export function checkRate(recent: number[], now: number): MessageError | null {
-    if (recent.length < RATE_LIMIT.messages) return null
-    // Le joueur pourra publier lorsque le plus ancien message de la fenêtre en sortira.
-    const oldest = Math.min(...recent)
-    return { code: 'TOO_MANY_MESSAGES', retryAfterMs: oldest + RATE_LIMIT.windowMs - now }
+  if (recent.length < RATE_LIMIT.messages) return null
+  // Le joueur pourra publier lorsque le plus ancien message de la fenêtre en sortira.
+  const oldest = Math.min(...recent)
+  return { code: 'TOO_MANY_MESSAGES', retryAfterMs: oldest + RATE_LIMIT.windowMs - now }
 }

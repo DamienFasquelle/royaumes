@@ -31,16 +31,16 @@ const tablePolicy: ChannelPolicy = {
   canSubscribe: (channel) => channel === 'table',
   source: {
     read: async (after) =>
-        rows
-            .filter((row) => row.id > after)
-            .map((row) => ({
-              position: row.id,
-              stream: 'table',
-              version: row.id,
-              type: 'RowAdded',
-              data: { text: row.text },
-              occurredAt: new Date(),
-            })),
+      rows
+        .filter((row) => row.id > after)
+        .map((row) => ({
+          position: row.id,
+          stream: 'table',
+          version: row.id,
+          type: 'RowAdded',
+          data: { text: row.text },
+          occurredAt: new Date(),
+        })),
     start: async () => rows.at(-1)?.id ?? 0,
   },
 }
@@ -48,24 +48,28 @@ const tablePolicy: ChannelPolicy = {
 let store: EventStore
 let app: Hono<AppEnv>
 
+/** Application minimale : le joueur est lu dans un en-tête, et les flux sont très courts. */
+function createApp(maxStreamMs = 150) {
+  return new Hono<AppEnv>()
+    .use(async (c, next) => {
+      c.set('userId', c.req.header('x-test-user') ?? '')
+      await next()
+    })
+    .route(
+      '/stream',
+      createRealtimeApi({
+        store,
+        policies: [policy, secretPolicy, globalPolicy, tablePolicy],
+        pollMs: 20,
+        maxStreamMs,
+      }),
+    )
+}
+
 beforeEach(async () => {
   rows.length = 0
   store = createEventStore(await createTestDatabase())
-  // Application minimale : le joueur est lu dans un en-tête, et les flux sont très courts.
-  app = new Hono<AppEnv>()
-      .use(async (c, next) => {
-        c.set('userId', c.req.header('x-test-user') ?? '')
-        await next()
-      })
-      .route(
-          '/stream',
-          createRealtimeApi({
-            store,
-            policies: [policy, secretPolicy, globalPolicy, tablePolicy],
-            pollMs: 20,
-            maxStreamMs: 150,
-          }),
-      )
+  app = createApp()
 })
 
 /** Ouvre un flux et lit sa réponse jusqu'à sa fermeture volontaire. */
@@ -80,9 +84,9 @@ async function readStream(path: string, headers: Record<string, string> = {}) {
  */
 function eventIds(body: string): string[] {
   return body
-      .split('\n\n')
-      .filter((message) => message.includes('event: domain-event'))
-      .map((message) => message.match(/^id: (\d+)$/m)?.[1] ?? '')
+    .split('\n\n')
+    .filter((message) => message.includes('event: domain-event'))
+    .map((message) => message.match(/^id: (\d+)$/m)?.[1] ?? '')
 }
 
 describe('Flux temps réel', () => {
@@ -106,6 +110,9 @@ describe('Flux temps réel', () => {
   })
 
   it('transmet un événement enregistré pendant que le flux est ouvert', async () => {
+    // Flux plus long : sous la charge de la suite complète, l'enregistrement de l'événement
+    // peut dépasser la durée d'un flux très court.
+    app = createApp(1_000)
     const reading = readStream('/stream/test-alice')
     await new Promise((resolve) => setTimeout(resolve, 50))
     await store.append('test-alice', 0, [{ type: 'A', data: {} }])

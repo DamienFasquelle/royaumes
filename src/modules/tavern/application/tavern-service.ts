@@ -1,6 +1,14 @@
-import type { TavernMessage } from '../contracts'
-import { checkBody, checkRate, type MessageError, RATE_LIMIT } from '../domain/message'
+import type { PresentPlayer, TavernMessage } from '../contracts'
+import {
+  checkBody,
+  checkRate,
+  expiredBefore,
+  type MessageError,
+  RATE_LIMIT,
+} from '../domain/message'
+import { staleBefore } from '../domain/presence'
 import type { MessageRepository } from './message-repository'
+import type { PresenceRepository } from './presence-repository'
 
 /** Nombre de messages présentés à l'ouverture de la Taverne. */
 export const HISTORY_SIZE = 50
@@ -8,28 +16,69 @@ export const HISTORY_SIZE = 50
 export type PostResult = { ok: true; message: TavernMessage } | { ok: false; error: MessageError }
 
 /** Service applicatif de la Taverne. */
-export function createTavernService(repo: MessageRepository, clock = () => Date.now()) {
-    /** Publie un message au nom d'un joueur, après validation et limitation. */
-    async function post(player: { id: string; name: string }, body: string): Promise<PostResult> {
-        const checked = checkBody(body)
-        if (!checked.ok) return checked
-        const now = clock()
-        const recent = await repo.postedSince(player.id, now - RATE_LIMIT.windowMs)
-        const limited = checkRate(recent, now)
-        if (limited) return { ok: false, error: limited }
-        const message = await repo.add({
-            authorId: player.id,
-            authorName: player.name,
-            body: checked.body,
-            postedAt: now,
-        })
-        return { ok: true, message }
+export function createTavernService(
+  repo: MessageRepository,
+  presence: PresenceRepository,
+  clock = () => Date.now(),
+) {
+  /** Publie un message au nom d'un joueur, après validation et limitation. */
+  async function post(player: { id: string; name: string }, body: string): Promise<PostResult> {
+    const checked = checkBody(body)
+    if (!checked.ok) return checked
+    const now = clock()
+    const recent = await repo.postedSince(player.id, now - RATE_LIMIT.windowMs)
+    const limited = checkRate(recent, now)
+    if (limited) return { ok: false, error: limited }
+    const message = await repo.add({
+      authorId: player.id,
+      authorName: player.name,
+      body: checked.body,
+      postedAt: now,
+    })
+    return { ok: true, message }
+  }
+
+  /**
+   * Derniers messages de la Taverne. Les messages qui ont dépassé leur durée de conservation
+   * sont d'abord supprimés : ils ne sont jamais présentés, même si la tâche quotidienne
+   * ne les a pas encore supprimés.
+   */
+  async function latest() {
+    await repo.removeOlderThan(expiredBefore(clock()))
+    return repo.latest(HISTORY_SIZE)
+  }
+
+  /**
+   * Tâche quotidienne : applique les durées de conservation des messages et de la présence,
+   * même si personne ne visite la Taverne. Renvoie le nombre de lignes supprimées.
+   */
+  async function purge() {
+    const now = clock()
+    return {
+      messages: await repo.removeOlderThan(expiredBefore(now)),
+      presence: await presence.removeStale(staleBefore(now)),
     }
+  }
 
-    /** Derniers messages de la Taverne. */
-    const latest = () => repo.latest(HISTORY_SIZE)
+  /**
+   * Joueurs présents. Les lignes des joueurs partis sont d'abord supprimées : la présence
+   * n'est conservée que le temps de la visite, sans tâche de fond pour faire le ménage.
+   */
+  async function present(): Promise<PresentPlayer[]> {
+    await presence.removeStale(staleBefore(clock()))
+    return presence.list()
+  }
 
-    return { post, latest }
+  /** Enregistre le signal de présence d'un joueur, et renvoie les joueurs présents. */
+  async function heartbeat(player: PresentPlayer) {
+    await presence.touch(player, clock())
+    return present()
+  }
+
+  /** Retire aussitôt un joueur qui quitte la Taverne. */
+  const leave = (playerId: string) => presence.remove(playerId)
+
+  return { post, latest, present, heartbeat, leave, purge }
 }
 
 export type TavernService = ReturnType<typeof createTavernService>
