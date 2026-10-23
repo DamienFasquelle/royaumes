@@ -2,6 +2,8 @@ import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
+import { STAKE_RESOURCES } from '@/modules/duel/contracts'
+import { RESOURCES } from '@/modules/realm/contracts'
 import { createTestDatabase } from '@/platform/db/client'
 
 /** Répertoires des modules métier. */
@@ -35,5 +37,10 @@ describe("Fonctions d'aptitude", () => {
       const file = path.join(process.cwd(), 'src/modules', module, 'personal-data.ts')
       expect(existsSync(file), `${module} n'a pas de fichier personal-data.ts`).toBe(true)
     }
+  })
+  it('ne met en jeu dans un duel que des ressources que le Village sait prélever', () => {
+    // Le domaine du Duel ne peut pas importer le Village : il recopie le nom de ses ressources.
+    // Une ressource ajoutée ou renommée au Village doit l'être aussi dans le Duel.
+    expect([...STAKE_RESOURCES].sort()).toEqual([...RESOURCES].sort())
   })
 })
