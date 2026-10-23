@@ -167,7 +167,6 @@ export function createApi({
           }
           return result
         },
-        // DETTE TECHNIQUE (DT-014) : aucune tâche ne supprime les sessions expirées.
         // Durée de conservation des données de la Taverne.
         tavern: tavern.dailyTask,
         // Relais du flux publié par le Village extrait, s'il y en a un.

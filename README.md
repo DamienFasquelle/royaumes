@@ -58,7 +58,7 @@ src/
   modules/            Modules métier, un répertoire par contexte délimité
   bootstrap/          Racine de composition de l'application
   services/           Racines de composition des services extraits
-  ui/                 Thème et composants d'interface partagés
+  ui/                 Thème, composants d'interface partagés et couche 3D (ui/three)
 scripts/              Scripts d'exploitation, de mesure et de démarrage du service extrait
 drizzle/              Migrations de la base de données
 perf/                 Budget de performance et résultats des tests de charge
@@ -82,6 +82,28 @@ Un module n'est accessible depuis l'extérieur que par ses entrées publiques : 
 | `market` | Marché : échanges de ressources entre joueurs, par une saga orchestrée | `/api/market` |
 | `tavern` | Taverne : salon de discussion commun et présence des joueurs, sans Event Sourcing | `/api/tavern` |
 | `duel` | Duel : défis entre joueurs avec une mise en bois, pierre ou or, combats en manches simultanées, entraînement contre le maître d'armes piloté par l'ordinateur | `/api/duel` |
+
+## Le monde en 3D
+
+Chaque lieu du royaume est une scène 3D rendue dans le navigateur (ADR 0013) : le Village, dont
+les bâtiments grandissent avec leur niveau ; la salle du Donjon, où les héros affrontent les
+monstres ; l'arène des Duels ; la place du Marché, où chaque offre est un étal ; la Taverne, où
+sont attablés les joueurs présents ; le Hall des légendes, où se dressent les trois premiers du
+classement. Les scènes ne font que représenter la vue renvoyée par le serveur : les combats
+rejouent les effets enregistrés par la dernière manche, sans rien calculer.
+
+- **Commandes** : glisser pour tourner, molette ou pincement pour zoomer, clic droit pour déplacer ;
+  au clavier, flèches, `+` et `-`, et `Échap` pour revenir à la vue d'ensemble du village.
+- **Accessibilité** : toute action reste disponible depuis les panneaux de jeu, au clavier ; la
+  préférence « réduire les animations » est respectée ; sans WebGL, un décor de repli remplace la
+  scène, et le jeu reste jouable.
+- **Bibliothèques** : Three.js, React Three Fiber et Drei. Les modèles, décors et effets sont
+  procéduraux : aucune ressource externe n'est téléchargée.
+- **Performance** : la 3D n'est téléchargée qu'à l'entrée d'un lieu ; la boucle de rendu s'arrête
+  quand l'onglet est masqué.
+
+La couche partagée se trouve dans `src/ui/three/`, et chaque scène dans le répertoire `scene/` de
+son module.
 
 ## Temps réel
 
@@ -258,6 +280,9 @@ inexistant immobilise la mise jusqu'à son expiration (DT-012). L'interface ne p
 adversaires que les vingt premiers du classement (DT-013). Deux défis lancés exactement au même
 instant au même joueur peuvent être enregistrés tous les deux (DT-011). Un village est fondé sans
 or : seuls le bois et la pierre peuvent être misés avant la construction de la mine.
+
+Les scènes 3D ne sont couvertes par aucun test automatisé (DT-015), et chaque changement de lieu
+réinitialise le rendu WebGL (ADR 0013).
 
 Le service Village extrait n'est pas prêt pour la production : ses migrations, la pagination
 de son flux publié et la distribution de sa boîte d'envoi restent à traiter. Ces limites, et

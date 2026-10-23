@@ -1,10 +1,14 @@
 'use client'
 import { hc } from 'hono/client'
+import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RESOURCES, type Resource } from '@/modules/realm/contracts'
 import { useChannel } from '@/platform/realtime/use-channel'
+import { ConfirmDialog } from '@/ui/confirm'
 import { Entity } from '@/ui/entity'
+import { SceneLoading } from '@/ui/scene-loading'
 import { look } from '@/ui/theme'
+import { useToast } from '@/ui/toast'
 import type { MarketApi } from './api'
 import {
   type Amounts,
@@ -12,11 +16,18 @@ import {
   type MarketList,
   type OfferError,
   type OfferStatus,
+  type OfferSummary,
   type OfferView,
 } from './contracts'
 
 /** Client HTTP typé, déduit de la sous-application Hono du module. */
 const client = hc<MarketApi>('/api/market')
+
+/** Place du marché en 3D, chargée à la demande et seulement dans le navigateur. */
+const MarketWorld = dynamic(() => import('./scene/market-world').then((m) => m.MarketWorld), {
+  ssr: false,
+  loading: () => <SceneLoading text="Les marchands dressent leurs étals..." />,
+})
 
 /** Libellé affiché pour chaque état de la connexion temps réel. */
 const STATUS_LABELS = {
@@ -76,10 +87,20 @@ function outcomeOf(view: OfferView): string {
   return OFFER_STATUS[view.status]
 }
 
-/** Écran du Marché : publication d'une offre, offres du joueur et offres des autres joueurs. */
+/** Durée restante avant l'échéance d'une offre : « 23 h », « 12 min ». */
+function timeLeft(expiresAt: number) {
+  const minutes = Math.max(0, Math.round((expiresAt - Date.now()) / 60_000))
+  return minutes >= 60 ? `${Math.floor(minutes / 60)} h` : `${minutes} min`
+}
+
+/** Écran du Marché : la place et ses étals, la publication d'une offre, les échanges. */
 export function MarketScreen() {
   const [list, setList] = useState<MarketList | undefined>(undefined)
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<OfferSummary | null>(null)
+  const [busy, setBusy] = useState(false)
+  const notify = useToast()
   // Formulaire de publication : une ressource cédée et une ressource demandée.
   const [give, setGive] = useState<{ resource: Resource; amount: number }>({
     resource: 'wood',
@@ -121,30 +142,44 @@ export function MarketScreen() {
     }
   })
 
-  // COMMANDES : chaque réponse contient la vue de l'offre, ou une erreur.
+  // COMMANDES : chaque réponse contient la vue de l'offre, ou une erreur. Une notification
+  // n'annonce un échange conclu qu'après la confirmation du serveur.
   async function handle(res: Response) {
     const body = (await res.json()) as { view: OfferView } | { error: { code: string } }
     if ('error' in body) {
       setMessage({ text: ERRORS[body.error.code as keyof typeof ERRORS] ?? 'Erreur.', error: true })
     } else {
-      setMessage({ text: outcomeOf(body.view), error: body.view.status === 'rejected' })
+      const failed = body.view.status === 'rejected' || !!body.view.missing
+      setMessage({ text: outcomeOf(body.view), error: failed })
+      if (body.view.status === 'completed')
+        notify('Échange conclu : les marchandises sont livrées.', 'gold')
     }
     await refresh()
   }
 
-  const publish = async () =>
-    handle(
-      await client.offers.$post({
+  async function run(send: () => Promise<Response>) {
+    if (busy) return
+    setBusy(true)
+    await handle(await send())
+    setBusy(false)
+  }
+  const publish = () =>
+    run(() =>
+      client.offers.$post({
         json: { give: { [give.resource]: give.amount }, want: { [want.resource]: want.amount } },
       }),
     )
-  const acceptOffer = async (id: string) =>
-    handle(await client.offers[':id'].accept.$post({ param: { id } }))
-  const withdrawOffer = async (id: string) =>
-    handle(await client.offers[':id'].withdraw.$post({ param: { id } }))
+  const acceptOffer = (id: string) => {
+    setConfirming(null)
+    return run(() => client.offers[':id'].accept.$post({ param: { id } }))
+  }
+  const withdrawOffer = (id: string) =>
+    run(() => client.offers[':id'].withdraw.$post({ param: { id } }))
 
-  const mine = list?.offers.filter((offer) => offer.mine) ?? []
-  const others = list?.offers.filter((offer) => !offer.mine) ?? []
+  const offers = list?.offers ?? []
+  const mine = offers.filter((offer) => offer.mine)
+  const others = offers.filter((offer) => !offer.mine)
+  const current = offers.find((offer) => offer.offerId === selected) ?? null
 
   /** Sélecteur d'une ressource et de sa quantité. */
   const picker = (
@@ -152,8 +187,10 @@ export function MarketScreen() {
     value: { resource: Resource; amount: number },
     onChange: (value: { resource: Resource; amount: number }) => void,
   ) => (
-    <>
-      <label htmlFor={`${label}-amount`}>{label}</label>
+    <div className="row" style={{ gap: 6 }}>
+      <label htmlFor={`${label}-amount`} style={{ minWidth: 70 }}>
+        {label}
+      </label>
       <input
         id={`${label}-amount`}
         className="amount"
@@ -173,73 +210,149 @@ export function MarketScreen() {
           </option>
         ))}
       </select>
-    </>
+    </div>
   )
 
   return (
-    <>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h1>
-          <Entity kind="market" /> Marché
-        </h1>
-        <span className="status" data-status={status}>
-          {STATUS_LABELS[status]}
-        </span>
-      </div>
-      <p className="tagline">
-        Marchands et voyageurs échangent ici bois, pierre et or, sous l'œil des gardes.
-      </p>
+    <section className="stage" aria-label="Marché">
+      <MarketWorld offers={offers} selected={selected} onSelect={setSelected} />
+      <div className="hud">
+        <div className="hud-header">
+          <h1>
+            <Entity kind="market" /> Marché
+          </h1>
+          <p className="tagline">
+            Marchands et voyageurs échangent ici bois, pierre et or, sous l'œil des gardes.
+          </p>
+          <span className="status" data-status={status}>
+            {STATUS_LABELS[status]}
+          </span>
+        </div>
 
-      <div className="panel row">
-        {picker('Je cède', give, setGive)}
-        {picker('contre', want, setWant)}
-        <button type="button" onClick={publish}>
-          Publier l'offre
-        </button>
-      </div>
-      {message && (
-        <p className={message.error ? 'error' : 'muted'} role="status">
-          {message.text}
-        </p>
-      )}
-
-      <section className="panel" aria-label="Vos offres">
-        <h2>Vos offres</h2>
-        {mine.length === 0 && <p className="muted">Aucune offre en cours.</p>}
-        <ul className="offers">
-          {mine.map((offer) => (
-            <li key={offer.offerId}>
-              <span>
-                <AmountsText amounts={offer.give} /> contre <AmountsText amounts={offer.want} />{' '}
-                <span className="muted">({OFFER_STATUS[offer.status]})</span>
-              </span>
-              {offer.status === 'open' && (
-                <button type="button" onClick={() => withdrawOffer(offer.offerId)}>
-                  Retirer
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="panel" aria-label="Offres des autres joueurs">
-        <h2>Offres des autres joueurs</h2>
-        {others.length === 0 && <p className="muted">Aucune offre disponible.</p>}
-        <ul className="offers">
-          {others.map((offer) => (
-            <li key={offer.offerId}>
-              <span>
-                {offer.sellerName} cède <AmountsText amounts={offer.give} /> contre{' '}
-                <AmountsText amounts={offer.want} />
-              </span>
-              <button type="button" onClick={() => acceptOffer(offer.offerId)}>
-                Accepter
+        <div className="hud-side">
+          {current && (
+            <div className="hud-panel" data-important="true">
+              <button
+                type="button"
+                className="secondary icon panel-close"
+                aria-label="Fermer"
+                onClick={() => setSelected(null)}
+              >
+                ✕
               </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </>
+              <h2>{current.mine ? 'Votre étal' : `Étal de ${current.sellerName}`}</h2>
+              <dl className="stats">
+                <dt>Cède</dt>
+                <dd>
+                  <AmountsText amounts={current.give} />
+                </dd>
+                <dt>Demande</dt>
+                <dd>
+                  <AmountsText amounts={current.want} />
+                </dd>
+                <dt>État</dt>
+                <dd>{OFFER_STATUS[current.status]}</dd>
+                <dt>Échéance</dt>
+                <dd>dans {timeLeft(current.expiresAt)}</dd>
+              </dl>
+              {current.mine
+                ? current.status === 'open' && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => withdrawOffer(current.offerId)}
+                    >
+                      Retirer l'offre
+                    </button>
+                  )
+                : current.status === 'open' && (
+                    <button type="button" disabled={busy} onClick={() => setConfirming(current)}>
+                      Conclure l'échange
+                    </button>
+                  )}
+            </div>
+          )}
+
+          <div className="hud-panel">
+            <h2>Proposer un échange</h2>
+            {picker('Je cède', give, setGive)}
+            {picker('contre', want, setWant)}
+            <p className="muted">
+              Les ressources cédées sont mises en séquestre dès la publication, et rendues si
+              l'offre est retirée ou expire.
+            </p>
+            <button type="button" onClick={publish} disabled={busy}>
+              Dresser l'étal
+            </button>
+          </div>
+          {message && (
+            <p className={message.error ? 'error' : 'hud-panel'} role="status">
+              {message.text}
+            </p>
+          )}
+
+          <section className="hud-panel" aria-label="Vos offres">
+            <h2>Vos offres</h2>
+            {mine.length === 0 && <p className="muted">Aucune offre en cours.</p>}
+            <ul className="offers">
+              {mine.map((offer) => (
+                <li key={offer.offerId} data-selected={offer.offerId === selected}>
+                  <span>
+                    <AmountsText amounts={offer.give} /> contre <AmountsText amounts={offer.want} />{' '}
+                    <span className="muted">({OFFER_STATUS[offer.status]})</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setSelected(offer.offerId)}
+                  >
+                    Voir
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="hud-panel" aria-label="Offres des autres joueurs">
+            <h2>Offres des autres joueurs</h2>
+            {others.length === 0 && <p className="muted">Aucune offre disponible.</p>}
+            <ul className="offers">
+              {others.map((offer) => (
+                <li key={offer.offerId} data-selected={offer.offerId === selected}>
+                  <span>
+                    {offer.sellerName} cède <AmountsText amounts={offer.give} /> contre{' '}
+                    <AmountsText amounts={offer.want} />
+                  </span>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setSelected(offer.offerId)}
+                  >
+                    Voir
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      </div>
+      {confirming && (
+        <ConfirmDialog
+          title="Conclure l'échange"
+          confirmLabel="Payer et recevoir"
+          onConfirm={() => acceptOffer(confirming.offerId)}
+          onCancel={() => setConfirming(null)}
+        >
+          <p>
+            Vous payez <AmountsText amounts={confirming.want} /> à {confirming.sellerName}, et
+            recevez <AmountsText amounts={confirming.give} />.
+          </p>
+          <p className="muted">
+            Si votre village n'a pas de quoi payer, rien n'est prélevé et l'offre reste ouverte.
+          </p>
+        </ConfirmDialog>
+      )}
+    </section>
   )
 }

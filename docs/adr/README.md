@@ -18,3 +18,4 @@ un nouvel ADR est rédigé et l'ancien prend le statut « remplacé ».
 | [0010](0010-duel-stockage.md) | Module Duel : journal d'événements, et projection des duels actifs | Accepté |
 | [0011](0011-duel-communication.md) | Duel et Village : saga des mises par la boîte d'envoi | Accepté |
 | [0012](0012-duel-temps-reel-echeances-ia.md) | Duel : canal discret, échéances paresseuses, maître d'armes et fonction d'aptitude | Accepté |
+| [0013](0013-presentation-3d.md) | Couche de présentation 3D, procédurale et chargée à la demande | Accepté |

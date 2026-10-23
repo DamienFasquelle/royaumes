@@ -104,6 +104,12 @@ flowchart TB
   db --> base
 ```
 
+Les interfaces des modules (`ui.tsx`) s'appuient sur la couche 3D partagée, `src/ui/three/`
+(canevas, décors, personnages, effets, étiquettes), et sur les scènes de leur propre répertoire
+`scene/`. Ces scènes sont chargées à la demande dans le navigateur, et ne reçoivent que les vues
+renvoyées par l'API : elles ne font partie que de la présentation (ADR 0013). Elles ne figurent pas
+sur le diagramme, qui décrit l'application serveur.
+
 Une flèche signifie « dépend de ». Le diagramme ne montre que les dépendances principales :
 `server.ts` crée également lui-même la base, le journal et l'adaptateur d'authentification,
 qu'il transmet à `create-api.ts`. Les modules `dungeon` et `ranking` écrivent directement

@@ -1,8 +1,10 @@
 'use client'
 import { hc } from 'hono/client'
-import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { useChannel } from '@/platform/realtime/use-channel'
 import { Entity } from '@/ui/entity'
+import { SceneLoading } from '@/ui/scene-loading'
 import type { TavernApi } from './api'
 import {
   HEARTBEAT_MS,
@@ -16,6 +18,15 @@ import {
 
 /** Client HTTP typé, déduit de la sous-application Hono du module. */
 const client = hc<TavernApi>('/api/tavern')
+
+/** Salle de la taverne en 3D, chargée à la demande et seulement dans le navigateur. */
+const TavernWorld = dynamic(() => import('./scene/tavern-world').then((m) => m.TavernWorld), {
+  ssr: false,
+  loading: () => <SceneLoading text="Le tavernier ranime le feu..." />,
+})
+
+/** Durée pendant laquelle un joueur qui vient d'écrire porte sa bulle, en millisecondes. */
+const SPEAKING_MS = 6_000
 
 /** Libellé affiché pour chaque état de la connexion temps réel. */
 const STATUS_LABELS = {
@@ -50,27 +61,48 @@ function merge(list: TavernMessage[], fresh: TavernMessage[]) {
 const timeOf = (postedAt: number) =>
   new Date(postedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 
-/** Écran de la Taverne : messages des joueurs, saisie d'un message et joueurs présents. */
+/** Écran de la Taverne : la salle, la conversation et les joueurs présents. */
 export function TavernScreen({ userId }: { userId: string }) {
   const [messages, setMessages] = useState<TavernMessage[]>([])
   const [players, setPlayers] = useState<PresentPlayer[]>([])
+  const [speaking, setSpeaking] = useState<Set<string>>(new Set())
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const list = useRef<HTMLUListElement>(null)
+
+  /** Un joueur vient d'écrire : il porte une bulle quelques secondes. */
+  const speak = useCallback((authorId: string) => {
+    setSpeaking((current) => new Set(current).add(authorId))
+    setTimeout(() => {
+      setSpeaking((current) => {
+        const next = new Set(current)
+        next.delete(authorId)
+        return next
+      })
+    }, SPEAKING_MS)
+  }, [])
 
   // REQUÊTE : l'historique est lu une fois ; les messages suivants arrivent par le canal.
   useEffect(() => {
     client.messages.$get().then(async (res) => {
       if (!res.ok) return
       const { messages: history } = await res.json()
-      setMessages((list) => merge(list, history))
+      setMessages((current) => merge(current, history))
     })
   }, [])
 
   // TEMPS RÉEL : le canal n'est pas discret, chaque événement contient le message.
   const status = useChannel(TAVERN_CHANNEL, (event) => {
     if (event.type !== MESSAGE_POSTED) return
-    setMessages((list) => merge(list, [event.data as unknown as TavernMessage]))
+    const message = event.data as unknown as TavernMessage
+    setMessages((current) => merge(current, [message]))
+    speak(message.authorId)
   })
+
+  // Le fil défile vers le message le plus récent.
+  useEffect(() => {
+    if (messages.length > 0) list.current?.scrollTo({ top: list.current.scrollHeight })
+  }, [messages.length])
 
   // PRÉSENCE : un signal à l'ouverture puis à intervalle régulier ; la réponse contient
   // les joueurs présents. Le départ est signalé lorsque le joueur quitte la page.
@@ -105,58 +137,69 @@ export function TavernScreen({ userId }: { userId: string }) {
     }
     setError(null)
     setDraft('')
-    setMessages((list) => merge(list, [body.message]))
+    setMessages((current) => merge(current, [body.message]))
+    speak(body.message.authorId)
   }
 
   return (
-    <>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h1>
-          <Entity kind="tavern" /> Taverne
-        </h1>
-        <span className="status" data-status={status}>
-          {STATUS_LABELS[status]}
-        </span>
-      </div>
-      <p className="tagline">Une chope, un feu de cheminée, et les nouvelles du royaume.</p>
+    <section className="stage" aria-label="Taverne">
+      <TavernWorld players={players} userId={userId} speaking={speaking} />
+      <div className="hud">
+        <div className="hud-header">
+          <h1>
+            <Entity kind="tavern" /> Taverne
+          </h1>
+          <p className="tagline">Une chope, un feu de cheminée, et les nouvelles du royaume.</p>
+          <span className="status" data-status={status}>
+            {STATUS_LABELS[status]}
+          </span>
+        </div>
 
-      <div className="tavern">
-        <section className="panel" aria-label="Messages">
-          {messages.length === 0 && <p className="muted">Aucun message pour le moment.</p>}
-          <ul className="messages" aria-live="polite">
-            {messages.map((message) => (
-              <li key={message.id} data-mine={message.authorId === userId || undefined}>
-                <span className="muted">{timeOf(message.postedAt)}</span>{' '}
-                <strong>{message.authorName}</strong> : {message.body}
-              </li>
-            ))}
-          </ul>
-          <form className="row" onSubmit={send}>
-            <input
-              aria-label="Votre message"
-              value={draft}
-              maxLength={MESSAGE_MAX_LENGTH * 2}
-              onChange={(e) => setDraft(e.target.value)}
-              style={{ flex: 1 }}
-            />
-            <button type="submit">Envoyer</button>
-          </form>
-          {error && (
-            <p className="error" role="status">
-              {error}
-            </p>
-          )}
-        </section>
+        <div className="hud-left">
+          <section className="hud-panel" aria-label="Joueurs présents">
+            <h2>Présents ({players.length})</h2>
+            <ul className="presence">
+              {players.map((player) => (
+                <li key={player.id}>
+                  {player.name}
+                  {player.id === userId && <span className="muted"> (vous)</span>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
 
-        <section className="panel" aria-label="Joueurs présents">
-          <h2>Présents</h2>
-          <ul className="presence">
-            {players.map((player) => (
-              <li key={player.id}>{player.name}</li>
-            ))}
-          </ul>
-        </section>
+        <div className="hud-side">
+          <section className="hud-panel" aria-label="Messages">
+            <h2>Conversation</h2>
+            {messages.length === 0 && <p className="muted">Aucun message pour le moment.</p>}
+            <ul className="messages" aria-live="polite" ref={list}>
+              {messages.map((message) => (
+                <li key={message.id} data-mine={message.authorId === userId || undefined}>
+                  <span className="muted">{timeOf(message.postedAt)}</span>{' '}
+                  <strong>{message.authorName}</strong> : {message.body}
+                </li>
+              ))}
+            </ul>
+            <form className="row" onSubmit={send} style={{ maxWidth: 'none' }}>
+              <input
+                aria-label="Votre message"
+                placeholder="Lever sa chope et prendre la parole..."
+                value={draft}
+                maxLength={MESSAGE_MAX_LENGTH * 2}
+                onChange={(e) => setDraft(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <button type="submit">Envoyer</button>
+            </form>
+            {error && (
+              <p className="error" role="status">
+                {error}
+              </p>
+            )}
+          </section>
+        </div>
       </div>
-    </>
+    </section>
   )
 }

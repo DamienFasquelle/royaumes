@@ -1,13 +1,21 @@
 'use client'
 import { hc } from 'hono/client'
+import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { type ChannelEvent, useChannel } from '@/platform/realtime/use-channel'
 import { Entity } from '@/ui/entity'
+import { SceneLoading } from '@/ui/scene-loading'
 import type { RankingApi } from './api'
 import { RANKING_CHANNEL, type Ranking } from './contracts'
 
 /** Client HTTP typé, déduit de la sous-application Hono du module. */
 const client = hc<RankingApi>('/api/ranking')
+
+/** Hall des légendes en 3D, chargé à la demande et seulement dans le navigateur. */
+const HallWorld = dynamic(() => import('./scene/hall-world').then((m) => m.HallWorld), {
+  ssr: false,
+  loading: () => <SceneLoading text="Les statues sortent de l'ombre..." />,
+})
 
 /** Libellé affiché pour chaque état de la connexion temps réel. */
 const STATUS_LABELS = {
@@ -22,10 +30,10 @@ const RETRY_MS = 1_000
 /** Nombre maximal de relectures pour un même événement annoncé. */
 const MAX_READS = 10
 
-/** Écran du Classement : les meilleurs joueurs, le joueur connecté étant mis en évidence. */
 /** Médailles des trois premiers du classement. */
 const MEDALS: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
 
+/** Écran du Classement : le podium, et les meilleurs joueurs, le joueur connecté mis en évidence. */
 export function RankingScreen({ userId }: { userId: string }) {
   // undefined : chargement en cours.
   const [ranking, setRanking] = useState<Ranking | undefined>(undefined)
@@ -73,52 +81,60 @@ export function RankingScreen({ userId }: { userId: string }) {
   const entries = ranking?.entries
 
   return (
-    <>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h1>
-          <Entity kind="ranking" /> Classement
-        </h1>
-        <span className="status" data-status={status}>
-          {STATUS_LABELS[status]}
-        </span>
+    <section className="stage" aria-label="Hall des légendes">
+      <HallWorld entries={entries ?? []} userId={userId} />
+      <div className="hud">
+        <div className="hud-header">
+          <h1>
+            <Entity kind="ranking" /> Hall des légendes
+          </h1>
+          <p className="tagline">Les hauts faits des héros du royaume, gravés dans la pierre.</p>
+          <span className="status" data-status={status}>
+            {STATUS_LABELS[status]}
+          </span>
+        </div>
+        <div className="hud-side" data-wide="true">
+          <section className="hud-panel" aria-label="Classement des joueurs">
+            <h2>Classement</h2>
+            {entries?.length === 0 && (
+              <p className="muted">Aucun héros n'a encore gravé son nom dans la pierre.</p>
+            )}
+            {entries && entries.length > 0 && (
+              <table className="ranking">
+                <thead>
+                  <tr>
+                    <th>Rang</th>
+                    <th>Joueur</th>
+                    <th title="Expéditions gagnées">Vict.</th>
+                    <th title="Expéditions jouées">Exp.</th>
+                    <th title="Or rapporté des expéditions">
+                      <Entity kind="gold" />
+                    </th>
+                    <th title="Meilleur butin">Butin</th>
+                    <th title="Améliorations de bâtiments">Amél.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry) => (
+                    <tr
+                      key={entry.playerId}
+                      aria-current={entry.playerId === userId ? 'true' : undefined}
+                    >
+                      <td>{MEDALS[entry.rank] ?? entry.rank}</td>
+                      <td>{entry.label}</td>
+                      <td>{entry.gamesWon}</td>
+                      <td>{entry.gamesPlayed}</td>
+                      <td>{entry.gold}</td>
+                      <td>{entry.bestLoot}</td>
+                      <td>{entry.upgrades}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        </div>
       </div>
-      <p className="tagline">Les hauts faits des héros du royaume, gravés dans la pierre.</p>
-      <section className="panel" aria-label="Classement des joueurs">
-        {entries?.length === 0 && <p className="muted">Aucun joueur classé pour le moment.</p>}
-        {entries && entries.length > 0 && (
-          <table className="ranking">
-            <thead>
-              <tr>
-                <th>Rang</th>
-                <th>Joueur</th>
-                <th>Victoires</th>
-                <th>Expéditions</th>
-                <th>
-                  <Entity kind="gold" />
-                </th>
-                <th>Meilleur butin</th>
-                <th>Améliorations</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry) => (
-                <tr
-                  key={entry.playerId}
-                  aria-current={entry.playerId === userId ? 'true' : undefined}
-                >
-                  <td>{MEDALS[entry.rank] ?? entry.rank}</td>
-                  <td>{entry.label}</td>
-                  <td>{entry.gamesWon}</td>
-                  <td>{entry.gamesPlayed}</td>
-                  <td>{entry.gold}</td>
-                  <td>{entry.bestLoot}</td>
-                  <td>{entry.upgrades}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-    </>
+    </section>
   )
 }
