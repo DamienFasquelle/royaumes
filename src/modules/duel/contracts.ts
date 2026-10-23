@@ -22,7 +22,7 @@ export {
   STAKE_MIN,
   STAKE_RESOURCES,
 } from './domain/content'
-export type { CancelReason, DuelResult, DuelStatus, ResolvedRound } from './domain/duel'
+export type { CancelReason, DuelResult, DuelStatus, Effect, ResolvedRound } from './domain/duel'
 export type { DuelError } from './domain/rules'
 export type { DuelistView, DuelView } from './domain/view'
 

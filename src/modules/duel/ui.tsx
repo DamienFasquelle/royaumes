@@ -14,8 +14,11 @@ import {
   type DuelError,
   type DuelView,
   duelChannel,
+  type Effect,
+  MAX_HP,
   MOVES,
   type Move,
+  type ResolvedRound,
   STAKE_MAX,
   STAKE_MIN,
   STAKE_RESOURCES,
@@ -54,6 +57,36 @@ const MOVE_LABELS: Record<Move, string> = {
   defend: 'Se défendre',
   counter: 'Contrer',
   heal: 'Se soigner',
+}
+
+/** Choix d'une passe, tel qu'il est raconté dans le journal du combat. */
+const MOVE_CHOICES: Record<Move, string> = {
+  attack: "d'attaquer",
+  defend: 'de se défendre',
+  counter: 'de contrer',
+  heal: 'de se soigner',
+}
+
+/** Description d'un effet d'une manche, comme celles du journal du Donjon. */
+function describeEffect(effect: Effect, round: ResolvedRound, nameOf: (id: string) => string) {
+  const source = nameOf(effect.source)
+  const target = nameOf(effect.target)
+  switch (effect.kind) {
+    case 'hit':
+      return round.moves[effect.target] === 'defend'
+        ? `${source} inflige ${effect.amount} dégâts à ${target}, qui se défend`
+        : `${source} inflige ${effect.amount} dégâts à ${target}`
+    case 'riposte':
+      return `${source} contre l'attaque et inflige ${effect.amount} dégâts à ${target}`
+    case 'stagger':
+      return `${source} contre dans le vide, se déséquilibre et perd ${effect.amount} PV`
+    case 'heal':
+      return effect.amount > 0
+        ? `${source} se soigne et regagne ${effect.amount} PV`
+        : `${source} se soigne, mais ses PV sont déjà au maximum`
+    case 'interrupted':
+      return `L'attaque de ${source} interrompt le soin de ${target}`
+  }
 }
 
 /** Motif de l'annulation d'un défi. */
@@ -431,26 +464,44 @@ export function DuelArena({ duelId, userId }: { duelId: string; userId: string }
         </div>
       )}
 
-      {/* Manches résolues : les passes sont révélées une fois la manche terminée. */}
+      {/* Journal du combat : les passes sont révélées une fois la manche terminée, avec leurs
+          effets, comme dans le Donjon. La manche la plus récente vient en tête. */}
       {view.rounds.length > 0 && (
-        <section className="panel" aria-label="Manches">
-          <h2>Manches</h2>
-          <ul className="log">
-            {[...view.rounds].reverse().map((round) => (
-              <li key={round.round}>
-                Manche {round.round} :{' '}
-                {Object.entries(round.moves)
-                  .map(([id, move]) => `${nameOf(id)} - ${MOVE_LABELS[move]}`)
-                  .join(', ')}
-                {round.missed.length > 0 && (
-                  <span className="muted">
-                    {' '}
-                    (sans choix : {round.missed.map(nameOf).join(', ')})
-                  </span>
-                )}
-              </li>
+        <section className="panel" aria-label="Journal du combat">
+          <h2>Journal du combat</h2>
+          {view.rounds
+            .map((round, index) => ({ round, before: view.rounds[index - 1]?.hp }))
+            .reverse()
+            .map(({ round, before }) => (
+              <div key={round.round}>
+                <h3>Manche {round.round}</h3>
+                <ul className="log">
+                  {Object.entries(round.moves).map(([id, move]) => (
+                    <li key={`move-${id}`}>
+                      {round.missed.includes(id)
+                        ? `${nameOf(id)} n'a pas choisi à temps : il se défend.`
+                        : `${nameOf(id)} a choisi ${MOVE_CHOICES[move]}.`}
+                    </li>
+                  ))}
+                  {round.effects.map((effect) => (
+                    // Chaque duelliste n'agit qu'une fois par manche : ce triplet identifie l'effet.
+                    <li key={`${effect.kind}-${effect.source}-${effect.target}`}>
+                      {describeEffect(effect, round, nameOf)}.
+                    </li>
+                  ))}
+                  {round.effects.length === 0 && <li>Aucun coup ne porte.</li>}
+                  <li className="muted">
+                    {Object.entries(round.hp)
+                      .map(([id, hp]) => {
+                        const change = hp - (before?.[id] ?? MAX_HP)
+                        const sign = change > 0 ? '+' : ''
+                        return `${nameOf(id)} : ${hp} PV${change !== 0 ? ` (${sign}${change})` : ''}`
+                      })
+                      .join(' - ')}
+                  </li>
+                </ul>
+              </div>
             ))}
-          </ul>
         </section>
       )}
 

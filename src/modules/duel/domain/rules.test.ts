@@ -5,6 +5,7 @@ import {
   MAX_HEALS,
   MAX_HP,
   MAX_ROUNDS,
+  MOVES,
   type Move,
   ROUND_MS,
   type Stake,
@@ -293,6 +294,7 @@ describe('Duel - les manches', () => {
         round: 1,
         moves: { alice: 'attack', bob: 'defend' },
         missed: [],
+        effects: [{ kind: 'hit', source: 'alice', target: 'bob', amount: 2 }],
         hp: { alice: 30, bob: 28 },
       },
     ])
@@ -309,7 +311,7 @@ describe('Duel - les manches', () => {
     ['defend', 'counter', 0, -2],
     ['defend', 'heal', 0, 5],
     ['counter', 'counter', -2, -2],
-    ['counter', 'heal', -2, 5],
+    ['counter', 'heal', 0, 5],
     ['heal', 'heal', 5, 5],
   ]
   it.each(table)('règle 12 : %s contre %s donne %i et %i', (a, b, onA, onB) => {
@@ -327,6 +329,44 @@ describe('Duel - les manches', () => {
       expect(state.challenger.hp).toBe(20 + onFirst)
       expect(state.opponent.hp).toBe(20 + onSecond)
     }
+  })
+
+  it('règle 12 : se soigner ne fait jamais perdre de points de vie à l’adversaire', () => {
+    const wounded: DuelState = {
+      ...fighting,
+      challenger: { ...fighting.challenger, hp: 20 },
+      opponent: { ...fighting.opponent, hp: 20 },
+    }
+    for (const move of MOVES) {
+      const { state } = fight(wounded, [['heal', move]])
+      // L'adversaire ne perd rien, quelle que soit sa passe ; il peut se soigner lui aussi.
+      expect(state.opponent.hp).toBeGreaterThanOrEqual(20)
+      const effects = state.rounds[0].effects.filter((effect) => effect.source === 'alice')
+      expect(effects.every((effect) => effect.target === 'alice')).toBe(true)
+    }
+  })
+
+  it('règle 12 : enregistre les effets de la manche, avec les dégâts et les soins réels', () => {
+    const wounded: DuelState = {
+      ...fighting,
+      challenger: { ...fighting.challenger, hp: 27 },
+    }
+    const effects = (a: Move, b: Move) => fight(wounded, [[a, b]]).state.rounds[0].effects
+    expect(effects('attack', 'counter')).toEqual([
+      { kind: 'riposte', source: 'bob', target: 'alice', amount: 8 },
+    ])
+    expect(effects('attack', 'heal')).toEqual([
+      { kind: 'hit', source: 'alice', target: 'bob', amount: 6 },
+      { kind: 'interrupted', source: 'alice', target: 'bob', amount: 0 },
+    ])
+    expect(effects('counter', 'counter')).toEqual([
+      { kind: 'stagger', source: 'alice', target: 'alice', amount: 2 },
+      { kind: 'stagger', source: 'bob', target: 'bob', amount: 2 },
+    ])
+    // Alice, à 27 points de vie, ne regagne que 3 points : le maximum n'est jamais dépassé.
+    expect(effects('heal', 'defend')).toEqual([
+      { kind: 'heal', source: 'alice', target: 'alice', amount: 3 },
+    ])
   })
 
   it('règle 13 : un duelliste se soigne au plus 3 fois par duel', () => {

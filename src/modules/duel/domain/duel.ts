@@ -49,12 +49,28 @@ export interface Duelist {
   missed: number
 }
 
-/** Manche résolue : les passes révélées des deux duellistes, et les points de vie qui en résultent. */
+/**
+ * Effet d'une passe sur un duelliste, comme les effets d'une manche du Donjon :
+ * - hit : l'attaque de source inflige amount dégâts à target (réduits s'il se défend) ;
+ * - riposte : le contre de source renvoie amount dégâts à l'attaquant target ;
+ * - stagger : source contre une garde, et perd lui-même amount points de vie ;
+ * - heal : source se soigne de amount points de vie (le maximum n'est jamais dépassé) ;
+ * - interrupted : l'attaque de source interrompt le soin de target, qui ne rend rien.
+ */
+export interface Effect {
+  kind: 'hit' | 'riposte' | 'stagger' | 'heal' | 'interrupted'
+  source: string
+  target: string
+  amount: number
+}
+
+/** Manche résolue : les passes révélées, leurs effets, et les points de vie qui en résultent. */
 export interface ResolvedRound {
   round: number
   moves: Record<string, Move>
   /** Duellistes qui n'avaient pas choisi à l'échéance. */
   missed: string[]
+  effects: Effect[]
   hp: Record<string, number>
 }
 
@@ -236,13 +252,13 @@ export function evolve(state: DuelState, event: DuelEvent): DuelState {
     case 'MoveChosen':
       return { ...state, choices: { ...state.choices, [event.data.playerId]: event.data.move } }
     case 'RoundResolved': {
-      const { round, moves, missed, hp, nextDeadline } = event.data
+      const { round, moves, missed, effects, hp, nextDeadline } = event.data
       let next: DuelState = {
         ...state,
         round: round + 1,
         deadline: nextDeadline,
         choices: {},
-        rounds: [...state.rounds, { round, moves, missed, hp }],
+        rounds: [...state.rounds, { round, moves, missed, effects, hp }],
       }
       for (const id of Object.keys(moves)) {
         next = updateDuelist(next, id, (duelist) => ({

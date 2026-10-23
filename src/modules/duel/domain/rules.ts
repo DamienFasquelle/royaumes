@@ -5,17 +5,21 @@
  * première commande qui suit, sans tâche de fond. Les numéros renvoient à la fiche de cadrage.
  */
 import {
+  ATTACK_DAMAGE,
   CHALLENGE_TTL_MS,
   DEFAULT_MOVE,
   FORFEIT_AFTER_MISSED,
+  GUARDED_DAMAGE,
+  HEAL_AMOUNT,
   isValidStake,
   MASTER_ID,
   MAX_HEALS,
   MAX_HP,
   MAX_ROUNDS,
   type Move,
-  POINTS,
+  RIPOSTE_DAMAGE,
   ROUND_MS,
+  STAGGER_DAMAGE,
   type Stake,
 } from './content'
 import {
@@ -25,6 +29,7 @@ import {
   type DuelState,
   type DuelStatus,
   duelistsOf,
+  type Effect,
   evolve,
   isDuelist,
   transferIdOf,
@@ -98,8 +103,55 @@ export function checkAvailability(
 // Résolution d'une manche
 // ---------------------------------------------------------------------------
 
-/** Points de vie après une variation, sans jamais dépasser le maximum ni descendre sous zéro. */
-const applyPoints = (hp: number, change: number) => Math.min(MAX_HP, Math.max(0, hp + change))
+/**
+ * Effets de la passe d'un duelliste, selon la passe de son adversaire (règle 12) :
+ * - l'attaque porte, réduite par la défense, sauf si elle est contrée ; elle interrompt le soin ;
+ * - le contre renvoie l'attaque, mais déséquilibre celui qui contre une garde ;
+ * - le soin rend des points de vie s'il n'est pas interrompu, sans jamais blesser l'adversaire ;
+ * - la défense n'a aucun effet propre : elle ne fait que réduire l'attaque.
+ */
+export function effectsOf(source: string, mine: Move, target: string, theirs: Move): Effect[] {
+  const effect = (kind: Effect['kind'], to: string, amount: number): Effect[] => [
+    { kind, source, target: to, amount },
+  ]
+  switch (mine) {
+    case 'attack':
+      if (theirs === 'counter') return []
+      if (theirs === 'defend') return effect('hit', target, GUARDED_DAMAGE)
+      return [
+        ...effect('hit', target, ATTACK_DAMAGE),
+        ...(theirs === 'heal' ? effect('interrupted', target, 0) : []),
+      ]
+    case 'counter':
+      if (theirs === 'attack') return effect('riposte', target, RIPOSTE_DAMAGE)
+      if (theirs === 'defend' || theirs === 'counter')
+        return effect('stagger', source, STAGGER_DAMAGE)
+      return []
+    case 'heal':
+      return theirs === 'attack' ? [] : effect('heal', source, HEAL_AMOUNT)
+    case 'defend':
+      return []
+  }
+}
+
+/**
+ * Points de vie d'un duelliste après les effets de la manche, sans jamais dépasser le maximum
+ * ni descendre sous zéro. Le montant d'un soin est ramené à ce qu'il rend réellement.
+ */
+function applyEffects(duelist: Duelist, effects: Effect[]): [number, Effect[]] {
+  let hp = duelist.hp
+  const applied = effects.map((effect) => {
+    if (effect.target !== duelist.id) return effect
+    if (effect.kind === 'heal') {
+      const amount = Math.min(effect.amount, MAX_HP - hp)
+      hp += amount
+      return { ...effect, amount }
+    }
+    if (effect.kind !== 'interrupted') hp = Math.max(0, hp - effect.amount)
+    return effect
+  })
+  return [hp, applied]
+}
 
 /**
  * Passe d'un duelliste à la résolution : son choix, celle du maître d'armes, ou la passe par
@@ -155,15 +207,26 @@ export function resolveRound(state: DuelState, at: number): DuelEvent[] {
   const missed = [a, b]
     .filter((duelist) => duelist.id !== MASTER_ID && state.choices[duelist.id] === undefined)
     .map((duelist) => duelist.id)
-  const hp = {
-    [a.id]: applyPoints(a.hp, POINTS[moves[a.id]][moves[b.id]]),
-    [b.id]: applyPoints(b.hp, POINTS[moves[b.id]][moves[a.id]]),
-  }
+  const raw = [
+    ...effectsOf(a.id, moves[a.id], b.id, moves[b.id]),
+    ...effectsOf(b.id, moves[b.id], a.id, moves[a.id]),
+  ]
+  const [hpA, afterA] = applyEffects(a, raw)
+  const [hpB, effects] = applyEffects(b, afterA)
+  const hp = { [a.id]: hpA, [b.id]: hpB }
 
   // L'issue est calculée sur l'état qui suit la manche.
   const resolved: DuelEvent = {
     type: 'RoundResolved',
-    data: { round: state.round, moves, missed, hp, nextDeadline: at + ROUND_MS, at },
+    data: {
+      round: state.round,
+      moves,
+      missed,
+      effects,
+      hp,
+      nextDeadline: at + ROUND_MS,
+      at,
+    },
   }
   const after = evolve(state, resolved)
   const result = outcomeOf(state, after.challenger, after.opponent)

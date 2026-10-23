@@ -47,8 +47,9 @@ introduit aussi un affrontement direct entre joueurs, alors que le Donjon est co
     manche n'ont pas été choisies, ou que la manche n'est pas échue.
 12. Les passes sont résolues selon le tableau suivant. L'attaque interrompt le soin ; la
     défense réduit l'attaque ; le contre renvoie l'attaque, mais déséquilibre celui qui
-    contre lorsque l'adversaire n'attaque pas ; le soin profite d'une manche où
-    l'adversaire n'attaque pas.
+    contre une garde (défense ou contre) ; le soin profite d'une manche où l'adversaire
+    n'attaque pas, et ne fait jamais perdre de points de vie à l'adversaire. Chaque manche
+    enregistre ses effets (dégâts infligés, soins reçus), présentés aux deux duellistes.
 
     | Passe A | Passe B | Effet sur A | Effet sur B |
     | --- | --- | --- | --- |
@@ -60,7 +61,7 @@ introduit aussi un affrontement direct entre joueurs, alors que le Donjon est co
     | se défendre | contrer | — | −2 (déséquilibre) |
     | se défendre | se soigner | — | +5 |
     | contrer | contrer | −2 | −2 |
-    | contrer | se soigner | −2 (déséquilibre) | +5 |
+    | contrer | se soigner | — | +5 |
     | se soigner | se soigner | +5 | +5 |
 
 13. Un duelliste peut se soigner au plus 3 fois par duel. Au-delà, la passe « se soigner »

@@ -66,15 +66,16 @@ export const MASTER_ID = 'master-at-arms'
 export const MASTER_NAME = "Maître d'armes"
 
 /**
- * Tableau de résolution (règle 12) : POINTS[mienne][sienne] est la variation de mes points
- * de vie lorsque je joue « mienne » et que mon adversaire joue « sienne ». Le tableau de la
- * fiche se lit ainsi dans les deux sens : l'effet sur B est POINTS[passe de B][passe de A].
+ * Valeurs du tableau de résolution (règle 12). Chaque passe a ses propres effets, qui dépendent
+ * de la passe de l'adversaire : rules.ts en déduit les effets de la manche.
  */
-export const POINTS: Record<Move, Record<Move, number>> = {
-  attack: { attack: -6, defend: 0, counter: -8, heal: 0 },
-  defend: { attack: -2, defend: 0, counter: 0, heal: 0 },
-  // Contrer une passe qui n'est pas une attaque déséquilibre celui qui contre.
-  counter: { attack: 0, defend: -2, counter: -2, heal: -2 },
-  // L'attaque annule le soin et porte tous ses dégâts.
-  heal: { attack: -6, defend: 5, counter: 5, heal: 5 },
-}
+/** Dégâts d'une attaque qui porte : sur une attaque, ou sur un soin, qu'elle interrompt. */
+export const ATTACK_DAMAGE = 6
+/** Dégâts d'une attaque sur un adversaire qui se défend. */
+export const GUARDED_DAMAGE = 2
+/** Dégâts que le contre renvoie à l'attaquant ; l'attaque contrée ne porte pas. */
+export const RIPOSTE_DAMAGE = 8
+/** Points de vie perdus par celui qui contre une garde (défense ou contre) : il se déséquilibre. */
+export const STAGGER_DAMAGE = 2
+/** Points de vie rendus par un soin que l'adversaire n'interrompt pas. */
+export const HEAL_AMOUNT = 5
