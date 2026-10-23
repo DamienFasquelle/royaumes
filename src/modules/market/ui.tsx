@@ -186,6 +186,9 @@ export function MarketScreen() {
           {STATUS_LABELS[status]}
         </span>
       </div>
+      <p className="tagline">
+        Marchands et voyageurs échangent ici bois, pierre et or, sous l'œil des gardes.
+      </p>
 
       <div className="panel row">
         {picker('Je cède', give, setGive)}

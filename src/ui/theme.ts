@@ -20,7 +20,7 @@ export const theme: Record<string, Look> = {
   quarry: { glyph: '⛏️', label: 'Carrière' },
   mine: { glyph: '⚒️', label: 'Mine' },
   dungeon: { glyph: '⚔️', label: 'Donjon' },
-  hero: { glyph: '🛡️', label: 'Héros' },
+  hero: { glyph: '🧝', label: 'Héros' },
   companion: { glyph: '🤖', label: 'Compagnon' },
   goblin: { glyph: '👺', label: 'Gobelin' },
   skeleton: { glyph: '💀', label: 'Squelette' },
@@ -29,8 +29,12 @@ export const theme: Record<string, Look> = {
   ranking: { glyph: '🏆', label: 'Classement' },
   market: { glyph: '⚖️', label: 'Marché' },
   tavern: { glyph: '🍺', label: 'Taverne' },
-  duel: { glyph: '🤺', label: 'Duel' },
-  master: { glyph: '🥋', label: "Maître d'armes" },
+  duel: { glyph: '⚜️', label: 'Duel' },
+  master: { glyph: '🧙', label: "Maître d'armes" },
+  'move-attack': { glyph: '🗡️', label: 'Attaquer' },
+  'move-defend': { glyph: '🛡️', label: 'Se défendre' },
+  'move-counter': { glyph: '⚡', label: 'Contrer' },
+  'move-heal': { glyph: '🧪', label: 'Se soigner' },
 }
 
 /** Apparence d'une entité ; une apparence neutre si l'entité n'est pas décrite. */

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useChannel } from '@/platform/realtime/use-channel'
 import { Entity } from '@/ui/entity'
+import { HpBar } from '@/ui/hp-bar'
 import { useCountdown } from '@/ui/use-countdown'
 import type { DungeonApi } from './api'
 import {
@@ -83,6 +84,9 @@ export function DungeonLobby() {
       <h1>
         <Entity kind="dungeon" /> Donjon
       </h1>
+      <p className="tagline">
+        Rassemblez une compagnie et descendez affronter le troll des profondeurs.
+      </p>
       <div className="panel row">
         <label htmlFor="difficulty">Niveau</label>
         <select
@@ -264,6 +268,7 @@ export function DungeonGame({ gameId, userId }: { gameId: string; userId: string
               {hero.id === view.hostId && <span className="muted"> (hôte)</span>}
               {hero.companion && <span className="muted"> (piloté par l'ordinateur)</span>}
             </span>
+            <HpBar hp={hero.hp} maxHp={hero.maxHp} />
             <span className="muted">
               {hero.hp}/{hero.maxHp} PV
             </span>
@@ -343,6 +348,7 @@ export function DungeonGame({ gameId, userId }: { gameId: string; userId: string
                 <span>
                   <Entity kind={monster.kind} /> {monsterName(monster, view.monsters)}
                 </span>
+                <HpBar hp={monster.hp} maxHp={monster.maxHp} />
                 <span className="muted">
                   {monster.hp}/{monster.maxHp} PV
                 </span>
@@ -384,8 +390,8 @@ export function DungeonGame({ gameId, userId }: { gameId: string; userId: string
 
       {/* Fin de l'expédition. */}
       {(view.phase === 'won' || view.phase === 'lost') && (
-        <div className="panel">
-          <h2>{view.phase === 'won' ? 'Victoire !' : 'Défaite...'}</h2>
+        <div className="panel verdict" data-outcome={view.phase}>
+          <h2>{view.phase === 'won' ? '🏆 Victoire !' : '💀 Défaite...'}</h2>
           <p>
             Butin de l'expédition : <Entity kind="gold" /> {view.loot}
           </p>
@@ -405,7 +411,7 @@ export function DungeonGame({ gameId, userId }: { gameId: string; userId: string
             ))}
             {view.lastRound.effects.map((effect) => (
               // Chaque combattant n'agit qu'une fois par manche : ce triplet identifie l'effet.
-              <li key={`${effect.kind}-${effect.source}-${effect.target}`}>
+              <li key={`${effect.kind}-${effect.source}-${effect.target}`} data-kind={effect.kind}>
                 {describeEffect(effect, nameOf)}.
               </li>
             ))}

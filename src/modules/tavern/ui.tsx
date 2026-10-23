@@ -118,6 +118,7 @@ export function TavernScreen({ userId }: { userId: string }) {
           {STATUS_LABELS[status]}
         </span>
       </div>
+      <p className="tagline">Une chope, un feu de cheminée, et les nouvelles du royaume.</p>
 
       <div className="tavern">
         <section className="panel" aria-label="Messages">

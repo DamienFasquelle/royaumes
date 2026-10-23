@@ -23,6 +23,9 @@ const RETRY_MS = 1_000
 const MAX_READS = 10
 
 /** Écran du Classement : les meilleurs joueurs, le joueur connecté étant mis en évidence. */
+/** Médailles des trois premiers du classement. */
+const MEDALS: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
+
 export function RankingScreen({ userId }: { userId: string }) {
   // undefined : chargement en cours.
   const [ranking, setRanking] = useState<Ranking | undefined>(undefined)
@@ -79,6 +82,7 @@ export function RankingScreen({ userId }: { userId: string }) {
           {STATUS_LABELS[status]}
         </span>
       </div>
+      <p className="tagline">Les hauts faits des héros du royaume, gravés dans la pierre.</p>
       <section className="panel" aria-label="Classement des joueurs">
         {entries?.length === 0 && <p className="muted">Aucun joueur classé pour le moment.</p>}
         {entries && entries.length > 0 && (
@@ -102,7 +106,7 @@ export function RankingScreen({ userId }: { userId: string }) {
                   key={entry.playerId}
                   aria-current={entry.playerId === userId ? 'true' : undefined}
                 >
-                  <td>{entry.rank}</td>
+                  <td>{MEDALS[entry.rank] ?? entry.rank}</td>
                   <td>{entry.label}</td>
                   <td>{entry.gamesWon}</td>
                   <td>{entry.gamesPlayed}</td>

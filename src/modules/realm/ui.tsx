@@ -88,14 +88,17 @@ export function VillageScreen({ userId }: { userId: string }) {
   }
 
   const title = (
-    <div className="row" style={{ justifyContent: 'space-between' }}>
-      <h1>
-        <Entity kind="village" /> {view?.name ?? 'Royaumes'}
-      </h1>
-      <span className="status" data-status={status}>
-        {STATUS_LABELS[status]}
-      </span>
-    </div>
+    <>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <h1>
+          <Entity kind="village" /> {view?.name ?? 'Royaumes'}
+        </h1>
+        <span className="status" data-status={status}>
+          {STATUS_LABELS[status]}
+        </span>
+      </div>
+      <p className="tagline">Vos terres, vos bâtiments : faites prospérer le village.</p>
+    </>
   )
 
   // Chargement en cours.

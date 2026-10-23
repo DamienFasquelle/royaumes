@@ -1,11 +1,17 @@
 import type { Metadata } from 'next'
+import { Cinzel, Lora } from 'next/font/google'
 import type { ReactNode } from 'react'
 import './globals.css'
+
+// Polices de la charte graphique, servies par l'application elle-même : Cinzel, gravée comme
+// une inscription romaine, pour les titres ; Lora, très lisible, pour le texte courant.
+const cinzel = Cinzel({ subsets: ['latin'], weight: ['400', '700'], variable: '--font-cinzel' })
+const lora = Lora({ subsets: ['latin'], variable: '--font-lora' })
 
 // Métadonnées par défaut de toutes les pages : titre de l'onglet et description.
 export const metadata: Metadata = {
   title: 'Royaumes',
-  description: 'Jeu multijoueur - monolithe modulaire',
+  description: 'Bâtissez votre village, explorez le donjon, croisez le fer en duel.',
 }
 
 /**
@@ -17,7 +23,7 @@ export const metadata: Metadata = {
  */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="fr">
+    <html lang="fr" className={`${cinzel.variable} ${lora.variable}`}>
       <body>
         <main>{children}</main>
       </body>

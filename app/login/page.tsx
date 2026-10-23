@@ -54,7 +54,8 @@ export default function LoginPage() {
       <h1>
         <Entity kind="village" /> Royaumes
       </h1>
-      <p className="muted">{mode === 'signIn' ? 'Connexion' : 'Création de compte'}</p>
+      <p className="tagline">Bâtissez votre village, explorez le donjon, croisez le fer en duel.</p>
+      <h2>{mode === 'signIn' ? 'Entrer dans le royaume' : 'Prêter serment au royaume'}</h2>
       <div className="panel">
         <form onSubmit={submit}>
           {mode === 'signUp' && (

@@ -7,6 +7,7 @@ import type { RankingApi } from '@/modules/ranking'
 import type { RankingEntry } from '@/modules/ranking/contracts'
 import { useChannel } from '@/platform/realtime/use-channel'
 import { Entity } from '@/ui/entity'
+import { HpBar } from '@/ui/hp-bar'
 import { useCountdown } from '@/ui/use-countdown'
 import type { DuelApi } from './api'
 import {
@@ -57,6 +58,23 @@ const MOVE_LABELS: Record<Move, string> = {
   defend: 'Se défendre',
   counter: 'Contrer',
   heal: 'Se soigner',
+}
+
+/** Ce que fait chaque passe, rappelé sous son bouton : le joueur choisit en connaissance de cause. */
+const MOVE_HINTS: Record<Move, string> = {
+  attack: 'Interrompt un soin ; réduite par la défense',
+  defend: 'Réduit une attaque à 2 dégâts',
+  counter: 'Renvoie 8 dégâts à qui attaque',
+  heal: 'Rend 5 PV, sauf si l’on vous attaque',
+}
+
+/** Catégorie d'un effet, qui donne sa couleur à la ligne du journal. */
+const EFFECT_KINDS: Record<Effect['kind'], 'damage' | 'heal' | undefined> = {
+  hit: 'damage',
+  riposte: 'damage',
+  stagger: 'damage',
+  heal: 'heal',
+  interrupted: undefined,
 }
 
 /** Choix d'une passe, tel qu'il est raconté dans le journal du combat. */
@@ -185,6 +203,9 @@ export function DuelLobby({ userId }: { userId: string }) {
       <h1>
         <Entity kind="duel" /> Duels
       </h1>
+      <p className="tagline">
+        Croisez le fer avec un autre seigneur, ou entraînez-vous auprès du maître d'armes.
+      </p>
 
       <section className="panel" aria-label="Vos duels">
         <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -348,20 +369,35 @@ export function DuelArena({ duelId, userId }: { duelId: string; userId: string }
       {title}
 
       {/* Les deux duellistes. */}
-      <section className="panel heroes" aria-label="Duellistes">
-        {[view.me, view.rival].map((duelist) => (
-          <div key={duelist.id} className="fighter" data-down={duelist.hp <= 0}>
-            <span>
-              <Entity kind={duelist.id === userId ? 'hero' : view.training ? 'master' : 'hero'} />{' '}
+      <section className="panel versus" aria-label="Duellistes">
+        {[view.me, view.rival].map((duelist, index) => (
+          <div
+            key={duelist.id}
+            className="duelist"
+            data-down={duelist.hp <= 0}
+            style={{ order: index === 0 ? 0 : 2 }}
+          >
+            <span className="portrait">
+              <Entity kind={view.training && duelist.id !== userId ? 'master' : 'hero'} />
+            </span>
+            <span className="name">
               {duelist.name || 'En attente de réponse'}
               {duelist.id === userId && <span className="muted"> (vous)</span>}
             </span>
+            <HpBar hp={duelist.hp} maxHp={duelist.maxHp} />
             <span className="muted">
-              {duelist.hp}/{duelist.maxHp} PV - {duelist.healsLeft} soin(s)
+              {duelist.hp}/{duelist.maxHp} PV - <Entity kind="move-heal" /> {duelist.healsLeft}
             </span>
-            {view.status === 'fighting' && duelist.ready && <span className="ok">prêt</span>}
+            {view.status === 'fighting' && (
+              <span className={duelist.ready ? 'ok' : 'muted'}>
+                {duelist.ready ? 'en garde' : 'réfléchit...'}
+              </span>
+            )}
           </div>
         ))}
+        <span className="vs" style={{ order: 1 }} aria-hidden="true">
+          VS
+        </span>
       </section>
 
       {/* Saga des mises en cours : la réponse du Village est attendue. */}
@@ -412,10 +448,11 @@ export function DuelArena({ duelId, userId }: { duelId: string; userId: string }
           </div>
           {view.me.move ? (
             <p className="muted">
-              Votre passe : {MOVE_LABELS[view.me.move]}. En attente de votre adversaire.
+              Votre passe : <Entity kind={`move-${view.me.move}`} /> {MOVE_LABELS[view.me.move]}. En
+              attente de votre adversaire.
             </p>
           ) : (
-            <div className="actions">
+            <div className="moves">
               {MOVES.map((move) => (
                 <button
                   key={move}
@@ -423,7 +460,11 @@ export function DuelArena({ duelId, userId }: { duelId: string; userId: string }
                   disabled={move === 'heal' && view.me.healsLeft === 0}
                   onClick={() => strike(move)}
                 >
+                  <span className="glyph">
+                    <Entity kind={`move-${move}`} />
+                  </span>
                   {MOVE_LABELS[move]}
+                  <small>{MOVE_HINTS[move]}</small>
                 </button>
               ))}
             </div>
@@ -433,13 +474,22 @@ export function DuelArena({ duelId, userId }: { duelId: string; userId: string }
 
       {/* Issue du duel. */}
       {view.status === 'finished' && view.result && (
-        <div className="panel">
+        <div
+          className="panel verdict"
+          data-outcome={
+            view.result.outcome === 'draw'
+              ? 'draw'
+              : view.result.winnerId === userId
+                ? 'won'
+                : 'lost'
+          }
+        >
           <h2>
             {view.result.outcome === 'draw'
-              ? 'Duel nul'
+              ? '⚖️ Duel nul'
               : view.result.winnerId === userId
-                ? 'Victoire !'
-                : 'Défaite...'}
+                ? '🏆 Victoire !'
+                : '💀 Défaite...'}
           </h2>
           {!view.training && (
             <p>
@@ -485,7 +535,10 @@ export function DuelArena({ duelId, userId }: { duelId: string; userId: string }
                   ))}
                   {round.effects.map((effect) => (
                     // Chaque duelliste n'agit qu'une fois par manche : ce triplet identifie l'effet.
-                    <li key={`${effect.kind}-${effect.source}-${effect.target}`}>
+                    <li
+                      key={`${effect.kind}-${effect.source}-${effect.target}`}
+                      data-kind={EFFECT_KINDS[effect.kind]}
+                    >
                       {describeEffect(effect, round, nameOf)}.
                     </li>
                   ))}
