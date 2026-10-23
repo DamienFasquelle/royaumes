@@ -3,6 +3,7 @@
 - Auteur : Damien Fasquelle
 - Date : 2026-10-23
 - Nom technique du module : `duel`
+- Validée par l'enseignant le :
 
 ## L'idée
 
@@ -68,7 +69,7 @@ introduit aussi un affrontement direct entre joueurs, alors que le Donjon est co
     est refusée.
 14. Une manche dure 20 secondes. Un duelliste qui n'a pas choisi de passe à l'échéance est
     réputé s'être défendu. Un duelliste qui manque deux manches consécutives perd le duel
-    par abandon.
+    par abandon ; si les deux abandonnent à la même manche, le duel est nul.
 15. Le duel se termine dès que les points de vie d'un duelliste tombent à zéro ou moins,
     ou à l'issue de la 12e manche. Le duelliste qui a le plus de points de vie gagne. Si
     les deux tombent à zéro à la même manche, ou finissent à égalité de points de vie, le
@@ -133,7 +134,8 @@ traiter ces deux sujets.
 ## Les données personnelles
 
 - Le nom des deux duellistes, copié dans les événements du duel (`ChallengeIssued`,
-  `ChallengeAccepted`), comme dans le Donjon.
+  `TrainingStarted`, `ChallengeAccepted`), comme dans le Donjon. Le nom de l'adversaire n'est
+  enregistré qu'à son acceptation du défi, à partir de sa session.
 - L'historique des duels du joueur : adversaire, mise, passes jouées, résultat, dates.
 
 L'export présente les duels du joueur. L'effacement réécrit son nom dans les événements

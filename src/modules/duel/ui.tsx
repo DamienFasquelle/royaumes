@@ -178,6 +178,7 @@ export function DuelLobby({ userId }: { userId: string }) {
   }, [refresh])
 
   // LECTURE DU LANGAGE PUBLIÉ DU CLASSEMENT : les joueurs que l'on peut défier.
+  // DETTE TECHNIQUE (DT-013) : seuls les vingt premiers du classement sont proposés.
   useEffect(() => {
     ranking.players.$get().then(async (res) => {
       if (res.ok) setPlayers((await res.json()).entries.filter((e) => e.playerId !== userId))

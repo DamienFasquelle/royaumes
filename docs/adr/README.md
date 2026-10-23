@@ -15,3 +15,6 @@ un nouvel ADR est rédigé et l'ancien prend le statut « remplacé ».
 | [0007](0007-saga-boite-envoi.md) | Saga orchestrée et boîte d'envoi transactionnelle pour les opérations entre modules | Accepté |
 | [0008](0008-donnees-personnelles.md) | Stockage classique pour la Taverne, et réécriture ciblée du journal pour l'effacement | Accepté |
 | [0009](0009-extraction-village.md) | Extraction du Village en service autonome, préparée mais non déployée | Accepté |
+| [0010](0010-duel-stockage.md) | Module Duel : journal d'événements, et projection des duels actifs | Accepté |
+| [0011](0011-duel-communication.md) | Duel et Village : saga des mises par la boîte d'envoi | Accepté |
+| [0012](0012-duel-temps-reel-echeances-ia.md) | Duel : canal discret, échéances paresseuses, maître d'armes et fonction d'aptitude | Accepté |

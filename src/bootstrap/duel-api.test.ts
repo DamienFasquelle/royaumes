@@ -279,3 +279,22 @@ describe('Duel - données personnelles', () => {
     expect((await viewOf(api, duelId, 'alice')).rival.name).toBe('Joueur effacé')
   })
 })
+
+describe('Duel - avec le Village extrait', () => {
+  it('joue un duel complet avec le Village extrait, sans créer ni perdre de ressource', async () => {
+    const api = await createTestApi({ villageService: true })
+    await api.post('/api/realm/village', { name: 'Valombre' }, 'alice')
+    await api.post('/api/realm/village', { name: 'Roche-Haute' }, 'bob')
+
+    const duelId = await challengeBob(api)
+    const accepted = await api.post(`/api/duel/duels/${duelId}/accept`, {}, 'bob')
+    expect(((await accepted.json()) as { view: DuelView }).view.status).toBe('fighting')
+
+    for (const b of ['heal', 'heal', 'heal', 'attack', 'attack'] as Move[]) {
+      await round(api, duelId, 'attack', b)
+    }
+    // Les mises ont été prélevées puis versées par le service, au moyen des mêmes messages.
+    expect(await stockOf(api, 'alice')).toMatchObject({ wood: 160, stone: 70 })
+    expect(await stockOf(api, 'bob')).toMatchObject({ wood: 40, stone: 30 })
+  })
+})

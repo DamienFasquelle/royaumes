@@ -81,13 +81,15 @@ Un module n'est accessible depuis l'extérieur que par ses entrées publiques : 
 | `ranking` | Classement des joueurs, construit à partir des événements du Village et du Donjon | `/api/ranking` |
 | `market` | Marché : échanges de ressources entre joueurs, par une saga orchestrée | `/api/market` |
 | `tavern` | Taverne : salon de discussion commun et présence des joueurs, sans Event Sourcing | `/api/tavern` |
+| `duel` | Duel : défis entre joueurs avec une mise en bois, pierre ou or, combats en manches simultanées, entraînement contre le maître d'armes piloté par l'ordinateur | `/api/duel` |
 
 ## Temps réel
 
 Les changements sont diffusés aux navigateurs par des Server-Sent Events, à l'adresse
 `/api/stream/<canal>`. Chaque canal n'est accessible qu'aux joueurs connectés autorisés par
 la règle du module concerné. Le canal `village-<joueur>` n'est ainsi accessible qu'au
-propriétaire du village, et le canal `dungeon-<expédition>` aux seuls membres de l'expédition.
+propriétaire du village, le canal `dungeon-<expédition>` aux seuls membres de l'expédition,
+et le canal `duel-<duel>` aux deux seuls duellistes.
 
 La plupart des canaux correspondent à un flux du journal d'événements. Les canaux `ranking`
 et `market` sont des canaux globaux : ils suivent, dans tout le journal, les événements qui
@@ -97,7 +99,7 @@ enregistrés après leur ouverture.
 Le canal `tavern` ne lit pas le journal, mais la table des messages de la Taverne : il
 transmet chaque nouveau message, avec son contenu, à tous les joueurs connectés.
 
-Les canaux du Donjon, du Classement et du Marché sont discrets : ils ne transmettent que la position,
+Les canaux du Donjon, du Classement, du Marché et du Duel sont discrets : ils ne transmettent que la position,
 le type et la version des événements, et chaque navigateur relit sa propre vue, filtrée
 par le serveur.
 
@@ -107,14 +109,30 @@ raccourcir cette durée pour observer la reconnexion.
 
 ## Échanges entre modules
 
-Une opération qui modifie les données de plusieurs modules, comme un échange du Marché, est
-une saga (ADR 0007) : chaque étape est une transaction locale à un module, et les modules
+Une opération qui modifie les données de plusieurs modules, comme un échange du Marché ou les
+mises d'un duel, est une saga (ADR 0007 et 0011) : chaque étape est une transaction locale à un module, et les modules
 communiquent par des messages enregistrés dans la boîte d'envoi (`platform.outbox`), dans la
 même transaction que leurs événements. Les messages sont distribués après chaque commande et
-chaque consultation du Marché, et chaque jour par la tâche planifiée `/api/cron/daily`. Leur livraison
+chaque consultation du Marché ou du Duel, et chaque jour par la tâche planifiée `/api/cron/daily`. Leur livraison
 est garantie au moins une fois : les gestionnaires de messages sont idempotents. Un message qui
 échoue dix fois est abandonné : la tâche quotidienne le signale, et le script
 `scripts/dead-letters.ts` permet de l'examiner, puis de le relancer une fois sa cause corrigée.
+
+## Duels
+
+Un joueur défie un autre joueur depuis la page « Duel », en mettant en jeu du bois, de la
+pierre ou de l'or, seuls ou combinés (de 10 à 500 de chaque). Sa mise est prélevée sur son
+village dès le lancement du défi ; celle de l'adversaire, s'il accepte. Le vainqueur reçoit les
+deux mises, et chacun récupère la sienne en cas de duel nul. Un défi refusé, annulé, ou sans
+réponse au bout de dix minutes rend sa mise au joueur qui l'a lancé.
+
+Le duel se joue en manches simultanées de vingt secondes : chaque duelliste choisit en secret
+d'attaquer, de se défendre, de contrer ou de se soigner, puis les passes sont révélées, et le
+journal du combat présente les dégâts infligés et les soins reçus. Un joueur ne peut avoir qu'un
+duel actif à la fois. Il peut aussi s'entraîner, sans mise, contre le maître d'armes.
+
+Les règles sont détaillées dans la [fiche de cadrage](docs/evaluation/fiche-cadrage.md), et les
+décisions d'architecture du module dans les ADR 0010 à 0012.
 
 ## Service Village extrait
 
@@ -141,6 +159,10 @@ page « Mes données » :
   tous les modules, et son nom est remplacé par une mention neutre dans le journal
   d'événements (ADR 0008). Chaque effacement est consigné dans `platform.erasures`.
 
+Les duels d'un joueur figurent dans son export : rôle, mise, passes qu'il a jouées et issue,
+sans le nom ni les passes de son adversaire. À l'effacement, son nom est remplacé dans les
+événements des duels et dans la table des duels actifs.
+
 Les messages de la Taverne sont conservés trente jours, et la présence d'un joueur deux
 minutes après son dernier signal. Ces durées sont appliquées à chaque lecture, et chaque jour
 par la tâche planifiée `/api/cron/daily`.
@@ -151,9 +173,14 @@ En développement, la base PostgreSQL est fournie par PGlite et conservée dans 
 `.data/`, exclu du dépôt. Les migrations du répertoire `drizzle/` y sont appliquées au
 démarrage. Pour repartir d'une base vide, arrêtez le serveur et supprimez le répertoire `.data/`.
 
+L'application est conservée d'un rechargement à l'autre du serveur de développement
+(`src/bootstrap/server.ts`) : seule l'interface se recharge à chaud. Après une modification du
+code serveur (domaine, service, API), redémarrez `pnpm dev`.
+
 Les tests utilisent une base PGlite en mémoire, recréée pour chaque fichier de test.
 
-Le classement et la liste des expéditions ouvertes sont des modèles de lecture, tenus à jour
+Le classement, la liste des expéditions ouvertes, celle des offres et celle des duels actifs
+sont des modèles de lecture, tenus à jour
 par des projections à partir du journal d'événements (ADR 0006). Chaque projection est
 rattrapée à la consultation, et reconstruite automatiquement lorsque sa version change :
 une modification qui change le contenu de ses tables doit donc augmenter sa version.
@@ -171,8 +198,8 @@ erreur. Il est exécuté sur la construction de production, base recréée, avec
 
 ## Déploiement
 
-L'application est déployée sur Vercel, dans la région de Francfort ; son adresse est
-indiquée dans la rubrique « About » du dépôt GitHub. Chaque envoi sur la branche `main`
+L'application est déployée sur Vercel, dans la région de Francfort, à l'adresse
+https://royaumes-six.vercel.app, indiquée aussi dans la rubrique « About » du dépôt GitHub. Chaque envoi sur la branche `main`
 déclenche un déploiement, qui n'aboutit que si `pnpm verify` réussit.
 
 Les variables `DATABASE_URL` et `DATABASE_URL_UNPOOLED` sont fournies par l'intégration
@@ -188,9 +215,12 @@ sans la première ; sans la seconde, la route des tâches quotidiennes reste fer
 - [Revue de sécurité de l'authentification](docs/qualite/revue-securite-authentification.md)
 - [Revue de sécurité du Donjon](docs/qualite/revue-securite-donjon.md)
 - [Revue de sécurité du Marché](docs/qualite/revue-securite-marche.md)
+- [Revue de sécurité du Duel](docs/qualite/revue-securite-duel.md)
 - [Registre des traitements](docs/rgpd/registre-traitements.md)
 - [Revue de conformité au RGPD](docs/rgpd/revue-conformite.md)
 - [Bilan technique](docs/bilan-technique.md)
+- [Fiche de cadrage du module Duel](docs/evaluation/fiche-cadrage.md)
+- [Document de rendu de l'évaluation](docs/evaluation/rendu.md)
 
 ## Conventions
 
@@ -220,6 +250,14 @@ quotidienne.
 L'effacement d'un compte parcourt tout le journal d'événements : sa durée croît avec la taille
 du journal. L'identifiant d'un joueur effacé reste dans le journal, sous une forme
 pseudonymisée : plus aucune table ne le relie à une personne (ADR 0008).
+
+Un duel n'avance que lorsqu'un de ses duellistes envoie une requête : si les deux quittent la
+page, ses échéances ne sont enregistrées, et ses mises rendues, qu'à la consultation suivante de
+leurs duels, ou lorsqu'un défi les concerne (ADR 0012). Un défi lancé à un identifiant de joueur
+inexistant immobilise la mise jusqu'à son expiration (DT-012). L'interface ne propose comme
+adversaires que les vingt premiers du classement (DT-013). Deux défis lancés exactement au même
+instant au même joueur peuvent être enregistrés tous les deux (DT-011). Un village est fondé sans
+or : seuls le bois et la pierre peuvent être misés avant la construction de la mine.
 
 Le service Village extrait n'est pas prêt pour la production : ses migrations, la pagination
 de son flux publié et la distribution de sa boîte d'envoi restent à traiter. Ces limites, et

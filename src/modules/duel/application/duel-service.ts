@@ -137,6 +137,8 @@ export function createDuelService(
    * DETTE TECHNIQUE (DT-011) : la disponibilité des deux joueurs est vérifiée avant le lancement,
    * et non dans la même transaction. Deux défis lancés au même instant au même joueur peuvent
    * être acceptés tous les deux.
+   * DETTE TECHNIQUE (DT-012) : l'existence de l'adversaire n'est pas vérifiée. Un défi lancé à
+   * un joueur inexistant immobilise la mise jusqu'à son expiration, qui la rend.
    */
   async function challenge(player: Player, opponentId: string, stake: Stake) {
     const duelId = newId()
